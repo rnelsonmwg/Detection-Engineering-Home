@@ -1,0 +1,34 @@
+{
+  "name": "all-seeing-eye",
+  "version": "1.0.0",
+  "description": "Threat Detection Forge — generates Splunk SPL detection packages from natural-language threat descriptions",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "npx --yes http-server web -p 8080 -o",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": ["splunk", "spl", "threat-hunting", "detection-engineering", "security", "soc"],
+  "author": "All Seeing Eye contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.ase.threat-forge",
+    "productName": "All Seeing Eye",
+    "files": [
+      "electron/**/*",
+      "web/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": { "category": "public.app-category.developer-tools" },
+    "win": { "target": "nsis" },
+    "linux": { "target": ["AppImage", "deb"], "category": "Development" }
+  }
+}

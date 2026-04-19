@@ -1,0 +1,4222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ALL SEEING EYE // Threat Detection Forge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Major+Mono+Display&family=Unica+One&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   ALL SEEING EYE — v1 prototype
+   Aesthetic: terminal-brutalist / field-manual / SOC console
+   ============================================================ */
+
+:root {
+  --bg:           #0a0c0a;
+  --bg-elev:      #0f1210;
+  --bg-panel:     #121614;
+  --ink:          #e6f0dc;
+  --ink-dim:      #9ba89a;
+  --ink-faint:    #546057;
+  --phosphor:     #b6ff6e;    /* primary accent — CRT phosphor green */
+  --amber:        #ffb347;    /* secondary accent — amber terminal */
+  --blood:        #ff5555;    /* alerts / destructive */
+  --cyan:         #6be4ff;    /* info / links */
+  --violet:       #c39bff;    /* llm / ai */
+  --rule:         #1f2620;
+  --rule-strong:  #2b3429;
+  --shadow:       0 0 0 1px var(--rule), 0 24px 48px -24px rgba(0,0,0,0.9);
+  --mono:         'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --display:      'Major Mono Display', 'JetBrains Mono', monospace;
+  --stencil:      'Unica One', 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* subtle CRT scanline atmosphere — very low opacity, doesn't interfere */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(182, 255, 110, 0.015) 0px,
+      rgba(182, 255, 110, 0.015) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  z-index: 1;
+  mix-blend-mode: screen;
+}
+body::after {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  z-index: 2;
+}
+
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ============ LAYOUT ============ */
+.app {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 280px 1fr 380px;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "header header header"
+    "sidebar main inspector"
+    "footer footer footer";
+  min-height: 100vh;
+}
+
+/* ============ HEADER ============ */
+.header {
+  grid-area: header;
+  border-bottom: 1px solid var(--rule-strong);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background:
+    linear-gradient(180deg, rgba(182,255,110,0.02), transparent),
+    var(--bg-elev);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.eye {
+  width: 32px; height: 32px;
+  position: relative;
+  display: grid; place-items: center;
+}
+.eye svg { width: 100%; height: 100%; }
+.eye .pupil {
+  animation: blink 4.5s infinite;
+  transform-origin: center;
+}
+@keyframes blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.1); }
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.brand-name {
+  font-family: var(--display);
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+}
+.brand-sub {
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: var(--phosphor);
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.header-meta .pill {
+  border: 1px solid var(--rule-strong);
+  padding: 4px 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.header-meta .dot {
+  width: 6px; height: 6px;
+  background: var(--phosphor);
+  box-shadow: 0 0 8px var(--phosphor);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* ============ SIDEBAR ============ */
+.sidebar {
+  grid-area: sidebar;
+  border-right: 1px solid var(--rule-strong);
+  background: var(--bg-elev);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--rule);
+}
+.sidebar-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: var(--phosphor);
+  text-transform: uppercase;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-section h3 .count {
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+.new-hunt-btn {
+  width: 100%;
+  background: var(--phosphor);
+  color: #0a0c0a;
+  border: none;
+  padding: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 11px;
+}
+.new-hunt-btn:hover {
+  background: #d1ff8a;
+  box-shadow: 0 0 20px rgba(182,255,110,0.4);
+}
+.hunt-list {
+  list-style: none;
+  padding: 0; margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hunt-item {
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  cursor: pointer;
+  transition: all 0.12s;
+  position: relative;
+}
+.hunt-item:hover {
+  border-color: var(--rule-strong);
+  background: var(--bg-panel);
+}
+.hunt-item.active {
+  border-color: var(--phosphor);
+  background: rgba(182,255,110,0.04);
+}
+.hunt-item-title {
+  font-size: 12px;
+  color: var(--ink);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hunt-item-meta {
+  font-size: 10px;
+  color: var(--ink-faint);
+  letter-spacing: 0.08em;
+  display: flex;
+  justify-content: space-between;
+}
+.hunt-delete {
+  position: absolute;
+  right: 6px; top: 6px;
+  background: none; border: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.hunt-item:hover .hunt-delete { opacity: 1; }
+.hunt-delete:hover { color: var(--blood); }
+
+.empty-state {
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-style: italic;
+  padding: 10px 0;
+}
+
+/* ============ MAIN ============ */
+.main {
+  grid-area: main;
+  overflow-y: auto;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.intro-card {
+  border: 1px solid var(--rule-strong);
+  padding: 22px 24px;
+  background:
+    linear-gradient(135deg, rgba(182,255,110,0.03), transparent 60%),
+    var(--bg-panel);
+  position: relative;
+}
+.intro-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 24px; height: 24px;
+  border-top: 1px solid var(--phosphor);
+  border-left: 1px solid var(--phosphor);
+}
+.intro-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 24px; height: 24px;
+  border-bottom: 1px solid var(--phosphor);
+  border-right: 1px solid var(--phosphor);
+}
+.intro-title {
+  font-family: var(--stencil);
+  font-size: 24px;
+  letter-spacing: 0.14em;
+  margin: 0 0 8px 0;
+  color: var(--ink);
+}
+.intro-desc {
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin: 0;
+  max-width: 70ch;
+}
+
+/* Input section */
+.section {
+  border: 1px solid var(--rule-strong);
+  background: var(--bg-panel);
+}
+.section-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule-strong);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, rgba(255,255,255,0.015), transparent);
+}
+.section-header h2 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--phosphor);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-header h2::before {
+  content: "";
+  width: 8px; height: 8px;
+  background: var(--phosphor);
+  display: inline-block;
+}
+.section-body { padding: 16px; }
+
+textarea.threat-input {
+  width: 100%;
+  min-height: 140px;
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+textarea.threat-input:focus {
+  border-color: var(--phosphor);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+.field label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+.field input, .field select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  padding: 9px 11px;
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+}
+.field input:focus, .field select:focus { border-color: var(--phosphor); }
+
+/* URL chips */
+.url-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  min-height: 20px;
+}
+.url-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(107,228,255,0.08);
+  border: 1px solid rgba(107,228,255,0.3);
+  color: var(--cyan);
+  padding: 4px 8px;
+  font-size: 11px;
+  max-width: 380px;
+}
+.url-chip .txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.url-chip button {
+  background: none;
+  border: none;
+  color: var(--cyan);
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.6;
+}
+.url-chip button:hover { opacity: 1; }
+
+.action-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.btn {
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  padding: 9px 16px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn:hover { border-color: var(--phosphor); color: var(--phosphor); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary {
+  background: var(--phosphor);
+  border-color: var(--phosphor);
+  color: #0a0c0a;
+  font-weight: 700;
+}
+.btn.primary:hover {
+  background: #d1ff8a;
+  box-shadow: 0 0 20px rgba(182,255,110,0.4);
+  color: #0a0c0a;
+}
+.btn.amber {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.btn.amber:hover {
+  background: var(--amber);
+  color: #0a0c0a;
+}
+.btn.danger {
+  border-color: var(--blood);
+  color: var(--blood);
+}
+.btn.danger:hover {
+  background: var(--blood);
+  color: #0a0c0a;
+}
+.btn.violet {
+  border-color: var(--violet);
+  color: var(--violet);
+}
+.btn.violet:hover {
+  background: var(--violet);
+  color: #0a0c0a;
+  box-shadow: 0 0 20px rgba(195,155,255,0.4);
+}
+
+/* ====== COMPARE MODELS ====== */
+.compare-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+.compare-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.12s;
+}
+.compare-target:hover { border-color: var(--rule-strong); }
+.compare-target.checked {
+  border-color: var(--violet);
+  background: rgba(195,155,255,0.04);
+}
+.compare-target input {
+  margin: 0;
+  accent-color: var(--violet);
+  width: 12px; height: 12px;
+  cursor: pointer;
+}
+.compare-target .ct-name {
+  flex: 1;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compare-target .ct-status {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.compare-target .ct-status.ready     { background: var(--phosphor); }
+.compare-target .ct-status.needs-key { background: var(--amber); }
+
+/* Comparison run tiles (live status while running) */
+.compare-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.compare-tile {
+  border: 1px solid var(--rule);
+  padding: 10px 12px;
+  background: var(--bg);
+  transition: all 0.2s;
+}
+.compare-tile.running {
+  border-color: var(--amber);
+  background: rgba(255,179,71,0.04);
+}
+.compare-tile.done {
+  border-color: var(--phosphor);
+  background: rgba(182,255,110,0.04);
+}
+.compare-tile.error {
+  border-color: var(--blood);
+  background: rgba(255,85,85,0.06);
+}
+.ct-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 4px;
+}
+.ct-title {
+  font-size: 12px;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.ct-line {
+  font-size: 10px;
+  color: var(--ink-dim);
+  letter-spacing: 0.08em;
+}
+.compare-tile.done .ct-line    { color: var(--phosphor); }
+.compare-tile.running .ct-line { color: var(--amber); }
+.compare-tile.error .ct-line   { color: var(--blood); }
+
+/* Side-by-side columns */
+.comparison-view {
+  border: 1px solid var(--rule-strong);
+  background: var(--bg-panel);
+}
+.comparison-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule-strong);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(195,155,255,0.05), transparent);
+}
+.comparison-header h2 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--violet);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.comparison-header h2::before {
+  content: "";
+  width: 8px; height: 8px;
+  background: var(--violet);
+  display: inline-block;
+}
+
+.compare-columns {
+  display: grid;
+  /* column count set inline via --cols */
+  grid-template-columns: repeat(var(--cols, 2), minmax(380px, 1fr));
+  overflow-x: auto;
+  max-height: 78vh;
+}
+.compare-col {
+  border-right: 1px solid var(--rule-strong);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+}
+.compare-col:last-child { border-right: none; }
+
+.compare-col-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--bg-elev);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.compare-col-header.error  { background: rgba(255,85,85,0.1); }
+.compare-col-header.fallback { background: rgba(255,179,71,0.1); }
+.cch-model {
+  font-family: var(--stencil);
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cch-provider {
+  font-size: 9px;
+  color: var(--ink-faint);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+.cch-stats {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.cch-stats strong { color: var(--amber); font-weight: 500; }
+
+.compare-col-body {
+  padding: 12px 14px;
+  overflow-y: auto;
+  flex: 1;
+  font-size: 12px;
+}
+.cc-subhead {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--phosphor);
+  text-transform: uppercase;
+  font-weight: 700;
+  margin: 16px 0 6px;
+}
+.cc-subhead:first-child { margin-top: 0; }
+.cc-subhead.amber { color: var(--amber); }
+.cc-subhead.violet { color: var(--violet); }
+
+.cc-item {
+  border: 1px solid var(--rule);
+  margin-bottom: 8px;
+  background: var(--bg);
+}
+.cc-item-title {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 11px;
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.cc-item-title .risk-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cc-spl {
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--ink);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.cc-why {
+  padding: 8px 10px;
+  border-top: 1px solid var(--rule);
+  font-size: 10px;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+
+.cc-error {
+  padding: 14px;
+  color: var(--blood);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+.cc-error strong { display: block; margin-bottom: 6px; letter-spacing: 0.1em; }
+
+.cc-prose-mini {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Diff highlighting for queries/MITRE across columns */
+.mitre-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.mitre-chip-row .tag {
+  font-size: 9px;
+  padding: 1px 6px;
+}
+
+/* Output package */
+.package {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pkg-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  font-size: 11px;
+}
+.pkg-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.pkg-meta-row dt {
+  color: var(--ink-faint);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 10px;
+  min-width: 90px;
+}
+.pkg-meta-row dd {
+  color: var(--ink);
+  margin: 0;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.tag {
+  background: rgba(255,179,71,0.08);
+  border: 1px solid rgba(255,179,71,0.3);
+  color: var(--amber);
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.tag.mitre {
+  background: rgba(195,155,255,0.08);
+  border-color: rgba(195,155,255,0.3);
+  color: var(--violet);
+}
+
+/* SPL code block */
+.spl-block {
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  overflow: hidden;
+}
+.spl-block-header {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.015);
+}
+.spl-block-title {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--amber);
+  font-weight: 700;
+}
+.spl-block-actions {
+  display: flex;
+  gap: 6px;
+}
+.icon-btn {
+  background: none;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-dim);
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: all 0.12s;
+}
+.icon-btn:hover { color: var(--phosphor); border-color: var(--phosphor); }
+
+.spl-code {
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--ink);
+}
+/* naive SPL token styling */
+.spl-cmd { color: var(--phosphor); font-weight: 500; }
+.spl-field { color: var(--cyan); }
+.spl-str { color: var(--amber); }
+.spl-comment { color: var(--ink-faint); font-style: italic; }
+.spl-pipe { color: var(--ink-dim); }
+
+.validation {
+  padding: 8px 14px;
+  border-top: 1px solid var(--rule);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.validation.ok    { color: var(--phosphor); background: rgba(182,255,110,0.04); }
+.validation.warn  { color: var(--amber);    background: rgba(255,179,71,0.04); }
+.validation.err   { color: var(--blood);    background: rgba(255,85,85,0.04); }
+.validation ul { margin: 4px 0 0 20px; padding: 0; }
+
+.prose {
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.prose h4 {
+  margin: 0 0 8px 0;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--phosphor);
+}
+
+/* ============ INSPECTOR (right) ============ */
+.inspector {
+  grid-area: inspector;
+  border-left: 1px solid var(--rule-strong);
+  background: var(--bg-elev);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.inspector-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--rule);
+}
+.inspector-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: var(--amber);
+  text-transform: uppercase;
+}
+.llm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.llm-option {
+  border: 1px solid var(--rule);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.llm-option:hover { border-color: var(--rule-strong); background: var(--bg-panel); }
+.llm-option.selected {
+  border-color: var(--amber);
+  background: rgba(255,179,71,0.04);
+}
+.llm-name {
+  font-size: 12px;
+  color: var(--ink);
+}
+.llm-provider {
+  font-size: 9px;
+  color: var(--ink-faint);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+.llm-status {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.llm-status.ready { background: var(--phosphor); box-shadow: 0 0 6px var(--phosphor); }
+.llm-status.needs-key { background: var(--amber); }
+
+.small-btn {
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-dim);
+  padding: 6px 10px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.12s;
+  width: 100%;
+  margin-top: 10px;
+}
+.small-btn:hover { color: var(--phosphor); border-color: var(--phosphor); }
+
+.key-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  padding: 7px 9px;
+  font-family: var(--mono);
+  font-size: 11px;
+  outline: none;
+  margin-top: 8px;
+}
+.key-input:focus { border-color: var(--amber); }
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.toggle {
+  position: relative;
+  width: 34px; height: 18px;
+  background: var(--rule-strong);
+  border-radius: 0;
+  cursor: pointer;
+  border: 1px solid var(--rule-strong);
+  transition: all 0.15s;
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 1px; left: 1px;
+  width: 14px; height: 14px;
+  background: var(--ink-dim);
+  transition: all 0.15s;
+}
+.toggle.on { background: rgba(182,255,110,0.15); border-color: var(--phosphor); }
+.toggle.on::after { left: 17px; background: var(--phosphor); }
+
+/* ============ FOOTER ============ */
+.footer {
+  grid-area: footer;
+  border-top: 1px solid var(--rule-strong);
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: var(--bg-elev);
+}
+.footer .ticker span { color: var(--phosphor); }
+
+/* ============ MODAL ============ */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--bg-elev);
+  border: 1px solid var(--rule-strong);
+  max-width: 620px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rule-strong);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--phosphor);
+}
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--rule-strong);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* Status / loader */
+.status-log {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  font-size: 11px;
+  color: var(--ink-dim);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* Temperature slider */
+.slider-row { padding: 12px 0 4px; }
+.slider-label {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+.slider-val {
+  color: var(--amber);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+input[type="range"].slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px;
+  background: var(--rule-strong);
+  outline: none; cursor: pointer;
+  border: none;
+}
+input[type="range"].slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px;
+  background: var(--amber);
+  cursor: pointer;
+  border: 1px solid #0a0c0a;
+  box-shadow: 0 0 8px rgba(255,179,71,0.4);
+}
+input[type="range"].slider::-moz-range-thumb {
+  width: 14px; height: 14px;
+  background: var(--amber);
+  cursor: pointer;
+  border: 1px solid #0a0c0a;
+}
+.slider-hints {
+  display: flex; justify-content: space-between;
+  font-size: 9px; color: var(--ink-faint);
+  margin-top: 4px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ====== LOUD MODEL BANNER ====== */
+.model-banner {
+  padding: 14px 18px;
+  border: 1px solid var(--phosphor);
+  background:
+    linear-gradient(90deg, rgba(182,255,110,0.08), rgba(182,255,110,0.02)),
+    var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.model-banner::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--phosphor);
+}
+.model-banner.offline {
+  border-color: var(--ink-dim);
+  background:
+    linear-gradient(90deg, rgba(155,168,154,0.06), transparent),
+    var(--bg);
+}
+.model-banner.offline::before { background: var(--ink-dim); }
+.model-banner.fallback {
+  border-color: var(--blood);
+  background:
+    linear-gradient(90deg, rgba(255,85,85,0.08), rgba(255,85,85,0.02)),
+    var(--bg);
+}
+.model-banner.fallback::before { background: var(--blood); }
+
+.mb-tag {
+  font-size: 9px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 4px;
+}
+.mb-name {
+  font-family: var(--stencil);
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+.model-banner.offline .mb-name { color: var(--ink-dim); }
+.model-banner.fallback .mb-name { color: var(--blood); }
+
+.mb-meta {
+  text-align: right;
+  font-size: 10px;
+  color: var(--ink-faint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.7;
+}
+.mb-meta strong {
+  color: var(--amber);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+}
+.mb-warn {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(255,85,85,0.06);
+  border-left: 2px solid var(--blood);
+  font-size: 11px;
+  color: var(--blood);
+  font-family: var(--mono);
+}
+.log-line { font-family: var(--mono); }
+.log-line.ok   { color: var(--phosphor); }
+.log-line.warn { color: var(--amber); }
+.log-line.err  { color: var(--blood); }
+.log-line .ts  { color: var(--ink-faint); margin-right: 10px; }
+
+.spinner {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--phosphor);
+  border-right-color: var(--phosphor);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--rule-strong); }
+::-webkit-scrollbar-thumb:hover { background: #3a4439; }
+
+/* responsive */
+@media (max-width: 1200px) {
+  .app { grid-template-columns: 240px 1fr 320px; }
+}
+@media (max-width: 980px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "main"
+      "sidebar"
+      "inspector"
+      "footer";
+  }
+  .sidebar, .inspector { border: none; border-top: 1px solid var(--rule-strong); }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ====== HEADER ====== -->
+  <header class="header">
+    <div class="brand">
+      <div class="eye" aria-hidden="true">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <!-- triangle frame -->
+          <path d="M32 4 L60 56 L4 56 Z" fill="none" stroke="#b6ff6e" stroke-width="1.5"/>
+          <!-- eye shape -->
+          <ellipse cx="32" cy="40" rx="16" ry="9" fill="none" stroke="#b6ff6e" stroke-width="1.5"/>
+          <!-- iris/pupil -->
+          <g class="pupil">
+            <circle cx="32" cy="40" r="6" fill="none" stroke="#b6ff6e" stroke-width="1.2"/>
+            <circle cx="32" cy="40" r="2.5" fill="#b6ff6e"/>
+          </g>
+          <!-- rays -->
+          <line x1="32" y1="28" x2="32" y2="22" stroke="#b6ff6e" stroke-width="1"/>
+          <line x1="48" y1="40" x2="54" y2="40" stroke="#b6ff6e" stroke-width="1"/>
+          <line x1="16" y1="40" x2="10" y2="40" stroke="#b6ff6e" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">ALL SEEING EYE</div>
+        <div class="brand-sub">Threat Detection Forge · v1.0</div>
+      </div>
+    </div>
+    <div class="header-meta">
+      <div class="pill"><span class="dot"></span><span id="hdr-status">Idle</span></div>
+      <div class="pill"><span id="hdr-model">No Model</span></div>
+      <div class="pill" id="hdr-clock">--:--:-- UTC</div>
+    </div>
+  </header>
+
+  <!-- ====== SIDEBAR ====== -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <button class="new-hunt-btn" id="btn-new-hunt">+ New Threat</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Threat Library <span class="count" id="lib-count">0</span></h3>
+      <ul class="hunt-list" id="hunt-list"></ul>
+      <div class="empty-state" id="lib-empty">No saved threats. Forge one to begin.</div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Preset Templates</h3>
+      <ul class="hunt-list">
+        <li class="hunt-item" data-preset="okta-session-hijack">
+          <div class="hunt-item-title">Okta Session Token Theft</div>
+          <div class="hunt-item-meta"><span>IDP · PERSIST</span><span>T1550.004</span></div>
+        </li>
+        <li class="hunt-item" data-preset="github-actions-secret-exfil">
+          <div class="hunt-item-title">GitHub Actions Secret Exfil</div>
+          <div class="hunt-item-meta"><span>CI/CD · EXFIL</span><span>T1552</span></div>
+        </li>
+        <li class="hunt-item" data-preset="aws-iam-backdoor">
+          <div class="hunt-item-title">AWS IAM Persistence Backdoor</div>
+          <div class="hunt-item-meta"><span>CLOUD · PERSIST</span><span>T1098</span></div>
+        </li>
+        <li class="hunt-item" data-preset="malicious-npm-dependency">
+          <div class="hunt-item-title">Malicious NPM Dependency</div>
+          <div class="hunt-item-meta"><span>SUPPLY · IMPLANT</span><span>T1195</span></div>
+        </li>
+        <li class="hunt-item" data-preset="entra-illicit-consent">
+          <div class="hunt-item-title">Entra Illicit OAuth Consent</div>
+          <div class="hunt-item-meta"><span>IDP · PERSIST</span><span>T1528</span></div>
+        </li>
+        <li class="hunt-item" data-preset="k8s-container-escape">
+          <div class="hunt-item-title">K8s Container Escape</div>
+          <div class="hunt-item-meta"><span>K8S · PRIVESC</span><span>T1611</span></div>
+        </li>
+        <li class="hunt-item" data-preset="gitlab-runner-hijack">
+          <div class="hunt-item-title">GitLab Rogue Runner</div>
+          <div class="hunt-item-meta"><span>CI/CD · PERSIST</span><span>T1584</span></div>
+        </li>
+        <li class="hunt-item" data-preset="saml-golden">
+          <div class="hunt-item-title">Golden SAML Forgery</div>
+          <div class="hunt-item-meta"><span>IDP · CRED</span><span>T1606.002</span></div>
+        </li>
+        <li class="hunt-item" data-preset="tfc-prod-destroy">
+          <div class="hunt-item-title">Terraform Prod Destroy</div>
+          <div class="hunt-item-meta"><span>IAC · IMPACT</span><span>T1485</span></div>
+        </li>
+        <li class="hunt-item" data-preset="leaked-env-file">
+          <div class="hunt-item-title">Leaked .env in Public Repo</div>
+          <div class="hunt-item-meta"><span>SECRETS · CRED</span><span>T1552.001</span></div>
+        </li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- ====== MAIN ====== -->
+  <main class="main">
+
+    <div class="intro-card">
+      <h1 class="intro-title">THE EYE IS OPEN</h1>
+      <p class="intro-desc">Describe a threat in natural language. The Eye forges a complete Splunk detection package: SPL detection rule, hunt queries, triage workflow, and response notes — with MITRE ATT&amp;CK mapping and data-model awareness. AI-agnostic by design. Works offline with its built-in forge; connect any LLM for deeper reasoning.</p>
+    </div>
+
+    <!-- INPUT -->
+    <section class="section">
+      <div class="section-header">
+        <h2>Threat Brief</h2>
+        <span id="input-hint" style="font-size:10px;color:var(--ink-faint);letter-spacing:0.14em;">FREE-FORM · ANY LANGUAGE</span>
+      </div>
+      <div class="section-body">
+        <textarea
+          class="threat-input"
+          id="threat-desc"
+          placeholder="e.g. Threat actor has obtained a long-lived AWS access key belonging to a CI/CD service account. They're using it to create new IAM users and attach AdministratorAccess policies for persistence, likely from non-AWS IPs and outside business hours..."
+        ></textarea>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="threat-name">Threat Name / Codename</label>
+            <input type="text" id="threat-name" placeholder="e.g. OPERATION SHADOW KEY" />
+          </div>
+          <div class="field">
+            <label for="threat-domain">Primary Domain</label>
+            <select id="threat-domain">
+              <option value="cloud">Cloud Controlplane</option>
+              <option value="cicd">CI/CD Pipeline</option>
+              <option value="identity">Identity / IDP</option>
+              <option value="endpoint">Endpoint</option>
+              <option value="network">Network</option>
+              <option value="supply-chain">Supply Chain</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:12px;">
+          <label for="ref-url">Reference URLs (MITRE, CVEs, threat reports) — press Enter to add</label>
+          <input type="text" id="ref-url" placeholder="https://attack.mitre.org/techniques/T1098/ ..." />
+          <div class="url-chips" id="url-chips"></div>
+        </div>
+
+        <div class="action-row">
+          <button class="btn primary" id="btn-forge">▶ Forge Detection Package</button>
+          <button class="btn violet" id="btn-compare">⊞ Compare Models</button>
+          <button class="btn amber" id="btn-fetch-urls">⤓ Ingest References</button>
+          <button class="btn" id="btn-clear-input">Clear</button>
+          <span id="forge-status" style="margin-left:auto;font-size:11px;color:var(--ink-faint);letter-spacing:0.12em;"></span>
+        </div>
+
+        <div class="status-log" id="status-log" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- OUTPUT -->
+    <section class="section" id="output-section" style="display:none;">
+      <div class="section-header">
+        <h2>Detection Package</h2>
+        <div class="spl-block-actions">
+          <button class="icon-btn" id="btn-export-json">Export JSON</button>
+          <button class="icon-btn" id="btn-export-md">Export MD</button>
+          <button class="icon-btn" id="btn-save-hunt">Save</button>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="package" id="package"></div>
+      </div>
+    </section>
+
+    <!-- Compare Models live-status tiles (shown during a comparison run) -->
+    <section class="section" id="compare-progress" style="display:none;">
+      <div class="section-header">
+        <h2 style="color:var(--violet);">Comparison Run</h2>
+        <span id="compare-progress-label" style="font-size:10px;color:var(--ink-faint);letter-spacing:0.14em;">RUNNING</span>
+      </div>
+      <div class="section-body">
+        <div class="compare-status-grid" id="compare-status-grid"></div>
+      </div>
+    </section>
+
+    <!-- Compare Models side-by-side view -->
+    <section class="comparison-view" id="comparison-view" style="display:none;">
+      <div class="comparison-header">
+        <h2>Model Comparison · Side-by-Side</h2>
+        <div class="spl-block-actions">
+          <button class="icon-btn" id="btn-export-compare-json">Export JSON</button>
+          <button class="icon-btn" id="btn-export-compare-md">Export MD</button>
+          <button class="icon-btn" id="btn-close-comparison">Close</button>
+        </div>
+      </div>
+      <div class="compare-columns" id="compare-columns"></div>
+    </section>
+
+  </main>
+
+  <!-- ====== INSPECTOR ====== -->
+  <aside class="inspector">
+
+    <div class="inspector-section">
+      <h3>LLM Providers</h3>
+      <div class="llm-list" id="llm-list"></div>
+      <button class="small-btn" id="btn-manage-llm">+ Add Custom / Local Model</button>
+    </div>
+
+    <div class="inspector-section">
+      <h3>API Credentials</h3>
+      <div id="key-fields"></div>
+      <div style="font-size:10px;color:var(--ink-faint);margin-top:8px;line-height:1.5;">
+        Keys stored locally in browser only. Never transmitted except to the provider you target.
+      </div>
+    </div>
+
+    <div class="inspector-section">
+      <h3>Forge Settings</h3>
+      <div class="settings-row">
+        <span title="Bypass the selected LLM entirely. Use for air-gapped work.">Force Offline (air-gap)</span>
+        <div class="toggle" id="toggle-force_offline" data-key="force_offline"></div>
+      </div>
+      <div class="settings-row">
+        <span>Fetch Reference URLs</span>
+        <div class="toggle on" id="toggle-fetch" data-key="fetch"></div>
+      </div>
+      <div class="settings-row">
+        <span>CIM Data Model Aware</span>
+        <div class="toggle on" id="toggle-cim" data-key="cim"></div>
+      </div>
+      <div class="settings-row">
+        <span>Include tstats Queries</span>
+        <div class="toggle on" id="toggle-tstats" data-key="tstats"></div>
+      </div>
+      <div class="settings-row">
+        <span>MITRE ATT&amp;CK Mapping</span>
+        <div class="toggle on" id="toggle-mitre" data-key="mitre"></div>
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span>LLM Temperature</span>
+          <span class="slider-val" id="temp-val">0.70</span>
+        </div>
+        <input type="range" id="temp-slider" min="0" max="1.5" step="0.05" value="0.7" class="slider" />
+        <div class="slider-hints">
+          <span>0.0 focused</span>
+          <span>0.7 balanced</span>
+          <span>1.5 wild</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="inspector-section">
+      <h3 style="color:var(--violet);">Compare Targets</h3>
+      <div style="font-size:10px;color:var(--ink-faint);margin-bottom:8px;line-height:1.5;">
+        Select 2+ providers, then click <strong style="color:var(--violet);">⊞ Compare Models</strong>.
+      </div>
+      <div class="compare-targets" id="compare-targets"></div>
+    </div>
+
+    <div class="inspector-section">
+      <h3>Environment</h3>
+      <div style="font-size:11px;color:var(--ink-dim);line-height:1.7;">
+        <div>Build · <span style="color:var(--phosphor);">ASE 1.0.0</span></div>
+        <div>Storage · <span id="stat-storage">0 KB</span></div>
+        <div>Threats · <span id="stat-threats">0</span></div>
+        <div>Mode · <span id="stat-mode">BROWSER</span></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ====== FOOTER ====== -->
+  <footer class="footer">
+    <div class="ticker">◉ <span>SIGINT</span> · <span>HUMINT</span> · <span>TECHINT</span> · Forge ready</div>
+    <div>ALL SEEING EYE // No data leaves this browser without your consent</div>
+  </footer>
+
+</div>
+
+<!-- ======= MODAL: Custom LLM ======= -->
+<div class="modal-backdrop" id="modal-llm">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add Custom LLM Provider</h3>
+      <button class="icon-btn" data-close-modal="modal-llm">Close</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Display Name</label>
+        <input type="text" id="llm-name-input" placeholder="e.g. Local Ollama · llama3" />
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>Provider Type</label>
+        <select id="llm-type-input">
+          <option value="openai-compatible">OpenAI-Compatible (Ollama, LM Studio, vLLM, OpenRouter, Groq, etc.)</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="gemini">Google Gemini</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>Endpoint URL</label>
+        <input type="text" id="llm-endpoint-input" placeholder="http://localhost:11434/v1/chat/completions" />
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>Model ID</label>
+        <input type="text" id="llm-model-input" placeholder="llama3.1:8b, gpt-4o, claude-opus-4-5, gemini-1.5-pro ..." />
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>API Key (optional for local)</label>
+        <input type="password" id="llm-key-input" placeholder="sk-..." />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="modal-llm">Cancel</button>
+      <button class="btn primary" id="btn-save-llm">Add Provider</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ALL SEEING EYE — application logic
+   ============================================================ */
+
+// ------------------------------------------------------------
+// STATE
+// ------------------------------------------------------------
+const STORAGE_KEY   = 'ase.v1.state';
+const state = {
+  threats: [],            // saved threat packages
+  activeThreatId: null,
+  urls: [],               // current input URLs
+  urlContexts: {},        // url -> fetched text
+  currentPackage: null,   // last generated package
+  llm: {
+    providers: [
+      { id: 'claude-opus',   name: 'Claude Opus 4.7',     provider: 'anthropic',       endpoint: 'https://api.anthropic.com/v1/messages',  model: 'claude-opus-4-7',          needsKey: true },
+      { id: 'claude-sonnet', name: 'Claude Sonnet 4.6',   provider: 'anthropic',       endpoint: 'https://api.anthropic.com/v1/messages',  model: 'claude-sonnet-4-6',        needsKey: true },
+      { id: 'gpt-4o',        name: 'ChatGPT · GPT-4o',    provider: 'openai',          endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o',              needsKey: true },
+      { id: 'gpt-4o-mini',   name: 'ChatGPT · GPT-4o-mini', provider: 'openai',        endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini',         needsKey: true },
+      { id: 'gemini-1.5-pro',name: 'Gemini 1.5 Pro',      provider: 'gemini',          endpoint: 'https://generativelanguage.googleapis.com/v1beta/models', model: 'gemini-1.5-pro', needsKey: true },
+      { id: 'offline',       name: 'Offline Forge (no LLM)', provider: 'offline',      endpoint: null,                                     model: null,                       needsKey: false },
+    ],
+    selected: 'claude-opus',
+    keys: {},
+  },
+  settings: {
+    // force_offline: when true, all forges go to the template engine
+    // even if an LLM is selected and credentialed. This is a CONSCIOUS
+    // override for air-gapped use — it is NOT the default path.
+    force_offline: false,
+    fetch: true,
+    cim: true,
+    tstats: true,
+    mitre: true,
+    // Variance controls — see why all outputs looked identical in v1.
+    temperature: 0.7,
+  },
+  // Compare Models feature: which providers to fan the same brief out to.
+  compareTargets: [],
+  compareResults: null, // { threat, runs: [{providerId, status, pkg, error, durationMs}] }
+};
+
+// ------------------------------------------------------------
+// PERSISTENCE
+// ------------------------------------------------------------
+function save() {
+  try {
+    const snapshot = {
+      threats: state.threats,
+      activeThreatId: state.activeThreatId,
+      llm: { selected: state.llm.selected, keys: state.llm.keys, providers: state.llm.providers },
+      settings: state.settings,
+      compareTargets: state.compareTargets,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    updateStorageStat();
+  } catch (e) { console.warn('Save failed', e); }
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const snap = JSON.parse(raw);
+    state.threats        = snap.threats        || [];
+    state.activeThreatId = snap.activeThreatId || null;
+    if (snap.llm) {
+      if (snap.llm.providers) state.llm.providers = snap.llm.providers;
+      state.llm.keys     = snap.llm.keys     || {};
+      // Keep the user's saved selection — including 'offline' if they chose it
+      // explicitly in v2. The migration of legacy `offline: true` setting is
+      // handled separately below.
+      state.llm.selected = snap.llm.selected || state.llm.selected;
+      // Safety: if the saved provider was removed, fall back to first available.
+      if (!state.llm.providers.find(p => p.id === state.llm.selected)) {
+        state.llm.selected = state.llm.providers[0].id;
+      }
+    }
+    if (snap.settings) {
+      state.settings = { ...state.settings, ...snap.settings };
+      // Migrate v1 → v2: old `offline: true` setting caused the "every output
+      // looks the same" bug. Discard it and use the new `force_offline` default.
+      if ('offline' in snap.settings) {
+        delete state.settings.offline;
+        state.settings.force_offline = false;
+      }
+    }
+    if (Array.isArray(snap.compareTargets)) {
+      // Only keep IDs that still exist in current providers
+      state.compareTargets = snap.compareTargets.filter(id =>
+        state.llm.providers.find(p => p.id === id)
+      );
+    }
+  } catch (e) { console.warn('Load failed', e); }
+}
+function updateStorageStat() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY) || '';
+    const kb  = (new Blob([raw]).size / 1024).toFixed(1);
+    document.getElementById('stat-storage').textContent = `${kb} KB`;
+    document.getElementById('stat-threats').textContent = state.threats.length;
+    document.getElementById('lib-count').textContent = state.threats.length;
+  } catch (e) {}
+}
+
+// ------------------------------------------------------------
+// STATUS / LOG
+// ------------------------------------------------------------
+const logEl = () => document.getElementById('status-log');
+function showLog() { logEl().style.display = 'block'; }
+function clearLog() { logEl().innerHTML = ''; logEl().style.display = 'none'; }
+function log(msg, cls = '') {
+  showLog();
+  const ts = new Date().toISOString().split('T')[1].split('.')[0];
+  const line = document.createElement('div');
+  line.className = 'log-line ' + cls;
+  line.innerHTML = `<span class="ts">${ts}</span>${msg}`;
+  logEl().appendChild(line);
+  logEl().scrollTop = logEl().scrollHeight;
+}
+function setStatus(txt) {
+  document.getElementById('hdr-status').textContent = txt;
+  document.getElementById('forge-status').textContent = txt;
+}
+
+// ------------------------------------------------------------
+// LLM PROVIDER LIST RENDER
+// ------------------------------------------------------------
+function renderLlmList() {
+  const el = document.getElementById('llm-list');
+  el.innerHTML = '';
+  state.llm.providers.forEach(p => {
+    const hasKey = p.provider === 'offline' || !p.needsKey || !!state.llm.keys[p.id];
+    const statusCls = p.provider === 'offline' ? 'ready' : (hasKey ? 'ready' : 'needs-key');
+    const div = document.createElement('div');
+    div.className = 'llm-option' + (state.llm.selected === p.id ? ' selected' : '');
+    div.dataset.id = p.id;
+    div.innerHTML = `
+      <div>
+        <div class="llm-name">${escapeHtml(p.name)}</div>
+        <div class="llm-provider">${escapeHtml(p.provider)}${p.model ? ' · ' + escapeHtml(p.model) : ''}</div>
+      </div>
+      <div class="llm-status ${statusCls}" title="${hasKey ? 'Ready' : 'API key required'}"></div>
+    `;
+    div.addEventListener('click', () => {
+      state.llm.selected = p.id;
+      renderLlmList();
+      renderKeyFields();
+      renderCompareTargets();
+      updateHeaderModel();
+      save();
+    });
+    el.appendChild(div);
+  });
+  updateHeaderModel();
+}
+function updateHeaderModel() {
+  const p = state.llm.providers.find(x => x.id === state.llm.selected);
+  document.getElementById('hdr-model').textContent = p ? p.name : 'No Model';
+}
+
+// ------------------------------------------------------------
+// API KEY FIELDS
+// ------------------------------------------------------------
+function renderKeyFields() {
+  const p = state.llm.providers.find(x => x.id === state.llm.selected);
+  const el = document.getElementById('key-fields');
+  if (!p || p.provider === 'offline' || !p.needsKey) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--ink-dim);">No credentials needed for <strong style="color:var(--phosphor);">${escapeHtml(p ? p.name : 'this provider')}</strong>.</div>`;
+    return;
+  }
+  const key = state.llm.keys[p.id] || '';
+  el.innerHTML = `
+    <div class="field">
+      <label>${escapeHtml(p.provider.toUpperCase())} API Key — ${escapeHtml(p.name)}</label>
+      <input class="key-input" type="password" id="active-key" value="${escapeHtml(key)}"
+             placeholder="Paste key..." autocomplete="off" />
+    </div>
+  `;
+  document.getElementById('active-key').addEventListener('change', e => {
+    state.llm.keys[p.id] = e.target.value;
+    save();
+    renderLlmList();
+    renderCompareTargets();
+  });
+}
+
+// ------------------------------------------------------------
+// URL CHIPS
+// ------------------------------------------------------------
+function renderUrls() {
+  const el = document.getElementById('url-chips');
+  el.innerHTML = '';
+  state.urls.forEach((u, i) => {
+    const hasCtx = !!state.urlContexts[u];
+    const chip = document.createElement('span');
+    chip.className = 'url-chip';
+    chip.innerHTML = `
+      <span class="txt" title="${escapeHtml(u)}">${hasCtx ? '✓ ' : ''}${escapeHtml(u)}</span>
+      <button data-idx="${i}" aria-label="Remove">×</button>
+    `;
+    chip.querySelector('button').addEventListener('click', () => {
+      delete state.urlContexts[state.urls[i]];
+      state.urls.splice(i, 1);
+      renderUrls();
+    });
+    el.appendChild(chip);
+  });
+}
+
+// ------------------------------------------------------------
+// SIDEBAR LIBRARY
+// ------------------------------------------------------------
+function renderLibrary() {
+  const el = document.getElementById('hunt-list');
+  const empty = document.getElementById('lib-empty');
+  el.innerHTML = '';
+  if (state.threats.length === 0) {
+    empty.style.display = 'block';
+    updateStorageStat();
+    return;
+  }
+  empty.style.display = 'none';
+  state.threats.forEach(t => {
+    const li = document.createElement('li');
+    li.className = 'hunt-item' + (state.activeThreatId === t.id ? ' active' : '');
+    li.dataset.id = t.id;
+    const dt = new Date(t.createdAt);
+    li.innerHTML = `
+      <div class="hunt-item-title">${escapeHtml(t.name || 'Untitled Threat')}</div>
+      <div class="hunt-item-meta">
+        <span>${escapeHtml((t.domain || '').toUpperCase())}</span>
+        <span>${dt.toLocaleDateString()}</span>
+      </div>
+      <button class="hunt-delete" data-del="${t.id}" title="Delete">×</button>
+    `;
+    li.addEventListener('click', (e) => {
+      if (e.target.dataset.del) return;
+      loadThreatById(t.id);
+    });
+    li.querySelector('.hunt-delete').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`Delete "${t.name}"?`)) {
+        state.threats = state.threats.filter(x => x.id !== t.id);
+        if (state.activeThreatId === t.id) state.activeThreatId = null;
+        renderLibrary();
+        save();
+      }
+    });
+    el.appendChild(li);
+  });
+  updateStorageStat();
+}
+
+function loadThreatById(id) {
+  const t = state.threats.find(x => x.id === id);
+  if (!t) return;
+  state.activeThreatId = id;
+  document.getElementById('threat-name').value = t.name || '';
+  document.getElementById('threat-desc').value = t.description || '';
+  document.getElementById('threat-domain').value = t.domain || 'cloud';
+  state.urls = (t.urls || []).slice();
+  state.urlContexts = {};
+  renderUrls();
+  state.currentPackage = t.package;
+  renderPackage(t.package);
+  renderLibrary();
+  save();
+}
+
+// ------------------------------------------------------------
+// SETTINGS TOGGLES
+// ------------------------------------------------------------
+function renderToggles() {
+  document.querySelectorAll('.toggle').forEach(t => {
+    const k = t.dataset.key;
+    t.classList.toggle('on', !!state.settings[k]);
+    t.onclick = () => {
+      state.settings[k] = !state.settings[k];
+      t.classList.toggle('on', state.settings[k]);
+      save();
+    };
+  });
+
+  // Temperature slider
+  const slider = document.getElementById('temp-slider');
+  const out    = document.getElementById('temp-val');
+  if (slider && out) {
+    slider.value = state.settings.temperature;
+    out.textContent = Number(state.settings.temperature).toFixed(2);
+    slider.addEventListener('input', e => {
+      state.settings.temperature = parseFloat(e.target.value);
+      out.textContent = state.settings.temperature.toFixed(2);
+    });
+    slider.addEventListener('change', save);
+  }
+}
+
+// ------------------------------------------------------------
+// URL HANDLING
+// ------------------------------------------------------------
+function addUrl(u) {
+  u = u.trim();
+  if (!u) return;
+  try { new URL(u); } catch { log(`Invalid URL: ${u}`, 'err'); return; }
+  if (state.urls.includes(u)) return;
+  state.urls.push(u);
+  renderUrls();
+}
+
+async function fetchUrlContent(url) {
+  // Use a CORS-friendly reader proxy. Jina's r.jina.ai is a read-only,
+  // CORS-open HTML-to-markdown proxy that's commonly used for LLM grounding.
+  // The request never leaves the browser except to this public proxy.
+  const proxyUrl = 'https://r.jina.ai/' + url;
+  const resp = await fetch(proxyUrl, {
+    headers: { 'Accept': 'text/plain' }
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  let txt = await resp.text();
+  if (txt.length > 15000) txt = txt.slice(0, 15000) + '\n...[truncated]';
+  return txt;
+}
+
+async function ingestUrls() {
+  if (!state.settings.fetch) {
+    log('URL fetching disabled in settings.', 'warn');
+    return;
+  }
+  if (state.urls.length === 0) {
+    log('No reference URLs to ingest.', 'warn');
+    return;
+  }
+  clearLog();
+  for (const u of state.urls) {
+    if (state.urlContexts[u]) { log(`Already cached: ${u}`, 'ok'); continue; }
+    log(`Fetching: ${u}`);
+    try {
+      const txt = await fetchUrlContent(u);
+      state.urlContexts[u] = txt;
+      log(`✓ Ingested ${txt.length} chars from ${u}`, 'ok');
+    } catch (err) {
+      log(`✗ ${err.message} — ${u}`, 'err');
+    }
+  }
+  renderUrls();
+}
+
+// ------------------------------------------------------------
+// OFFLINE FORGE — rule-based detection generator
+//
+// This is the heart of the "AI-agnostic" promise: the tool produces a
+// useful detection package even with no LLM connected. A real v1 would
+// have more rules; this prototype has a domain-aware template engine
+// plus keyword-based MITRE mapping and SPL construction.
+// ------------------------------------------------------------
+
+const MITRE_LEXICON = [
+  // --- AWS / cloud controlplane ---
+  { kws: ['access key','iam user','aws','sts','assumerole','assume role','cloudtrail'], tech: [
+      {id:'T1098', name:'Account Manipulation', tac:'Persistence'},
+      {id:'T1078.004', name:'Valid Accounts: Cloud Accounts', tac:'Persistence/Defense Evasion'},
+  ]},
+  { kws: ['s3 bucket','s3 public','bucket policy','bucket acl'], tech: [
+      {id:'T1530', name:'Data from Cloud Storage', tac:'Collection'},
+  ]},
+
+  // --- Azure / Entra ID ---
+  { kws: ['azure','entra','azuread','azure ad','app registration','service principal'], tech: [
+      {id:'T1098.003', name:'Account Manipulation: Additional Cloud Roles', tac:'Persistence'},
+      {id:'T1078.004', name:'Valid Accounts: Cloud Accounts', tac:'Persistence/Defense Evasion'},
+  ]},
+  { kws: ['conditional access','ca policy','mfa bypass','trusted location'], tech: [
+      {id:'T1556.009', name:'Modify Authentication Process: Conditional Access Policies', tac:'Credential Access/Defense Evasion'},
+  ]},
+
+  // --- GCP ---
+  { kws: ['gcp','google cloud','service account','gsuite','workspace','gke'], tech: [
+      {id:'T1098', name:'Account Manipulation', tac:'Persistence'},
+      {id:'T1078.004', name:'Valid Accounts: Cloud Accounts', tac:'Persistence/Defense Evasion'},
+  ]},
+
+  // --- CI/CD — GitHub ---
+  { kws: ['github','actions','workflow','pipeline','ci/cd','cicd','secret','oidc','github token','pat'], tech: [
+      {id:'T1552', name:'Unsecured Credentials', tac:'Credential Access'},
+      {id:'T1195.002', name:'Supply Chain: Compromise Software Supply Chain', tac:'Initial Access'},
+  ]},
+  { kws: ['self-hosted runner','self hosted runner','gh runner'], tech: [
+      {id:'T1584.004', name:'Compromise Infrastructure: Server', tac:'Resource Development'},
+      {id:'T1078', name:'Valid Accounts', tac:'Defense Evasion/Persistence'},
+  ]},
+
+  // --- GitLab, CircleCI, Jenkins ---
+  { kws: ['gitlab','gitlab ci','ci_job_token','ci_runner','masked variable'], tech: [
+      {id:'T1552.004', name:'Unsecured Credentials: Private Keys', tac:'Credential Access'},
+      {id:'T1195.002', name:'Supply Chain: Compromise Software Supply Chain', tac:'Initial Access'},
+  ]},
+  { kws: ['circleci','context','orb','circleci token'], tech: [
+      {id:'T1552', name:'Unsecured Credentials', tac:'Credential Access'},
+  ]},
+  { kws: ['jenkins','jenkinsfile','groovy','plugin','build node','agent.jar'], tech: [
+      {id:'T1059', name:'Command and Scripting Interpreter', tac:'Execution'},
+      {id:'T1505.004', name:'Server Software Component: IIS/Jenkins', tac:'Persistence'},
+  ]},
+
+  // --- IaC / Terraform / Pulumi ---
+  { kws: ['terraform','terraform cloud','tfc','cloudformation','iac','pulumi','workspace variable'], tech: [
+      {id:'T1078.004', name:'Valid Accounts: Cloud Accounts', tac:'Persistence/Defense Evasion'},
+      {id:'T1098', name:'Account Manipulation', tac:'Persistence'},
+  ]},
+
+  // --- Supply chain / packages ---
+  { kws: ['npm','pypi','dependency','package','supply chain','maven','ruby','gem','cargo','composer'], tech: [
+      {id:'T1195.001', name:'Supply Chain: Compromise Software Dependencies and Development Tools', tac:'Initial Access'},
+      {id:'T1059', name:'Command and Scripting Interpreter', tac:'Execution'},
+  ]},
+
+  // --- Identity / IdP (Okta, Entra, SSO) ---
+  { kws: ['okta','session','cookie','evilginx','adfs','sso','federation'], tech: [
+      {id:'T1550.004', name:'Use Alternate Authentication Material: Web Session Cookie', tac:'Defense Evasion/Lateral Movement'},
+      {id:'T1528', name:'Steal Application Access Token', tac:'Credential Access'},
+  ]},
+
+  // --- OAuth / SAML abuse ---
+  { kws: ['oauth','consent grant','illicit consent','admin consent','enterprise app'], tech: [
+      {id:'T1528', name:'Steal Application Access Token', tac:'Credential Access'},
+      {id:'T1550.001', name:'Use Alternate Authentication Material: Application Access Token', tac:'Defense Evasion/Lateral Movement'},
+  ]},
+  { kws: ['saml','assertion','signing certificate','golden saml'], tech: [
+      {id:'T1606.002', name:'Forge Web Credentials: SAML Tokens', tac:'Credential Access'},
+  ]},
+
+  // --- Serverless ---
+  { kws: ['lambda','function','serverless','cloud run','cloud function','azure function'], tech: [
+      {id:'T1648', name:'Serverless Execution', tac:'Execution'},
+  ]},
+
+  // --- Kubernetes ---
+  { kws: ['kubernetes','k8s','kubelet','kubectl','pod','image','cluster role','service account token','falco'], tech: [
+      {id:'T1610', name:'Deploy Container', tac:'Execution/Defense Evasion'},
+      {id:'T1613', name:'Container and Resource Discovery', tac:'Discovery'},
+      {id:'T1611', name:'Escape to Host', tac:'Privilege Escalation'},
+      {id:'T1552.007', name:'Unsecured Credentials: Container API', tac:'Credential Access'},
+  ]},
+
+  // --- Secrets scanners ---
+  { kws: ['trufflehog','gitleaks','detect-secrets','leaked secret','exposed key','secret scanner'], tech: [
+      {id:'T1552.001', name:'Unsecured Credentials: Credentials In Files', tac:'Credential Access'},
+      {id:'T1552.004', name:'Unsecured Credentials: Private Keys', tac:'Credential Access'},
+  ]},
+
+  // --- Generic adversary goals ---
+  { kws: ['backdoor','persistence','implant'], tech: [
+      {id:'T1136', name:'Create Account', tac:'Persistence'},
+  ]},
+  { kws: ['exfil','exfiltrate','steal','dump','export','webhook'], tech: [
+      {id:'T1567', name:'Exfiltration Over Web Service', tac:'Exfiltration'},
+      {id:'T1041', name:'Exfiltration Over C2 Channel', tac:'Exfiltration'},
+  ]},
+];
+
+function inferMitre(desc) {
+  const hay = desc.toLowerCase();
+  const hits = new Map();
+  MITRE_LEXICON.forEach(entry => {
+    if (entry.kws.some(k => hay.includes(k))) {
+      entry.tech.forEach(t => hits.set(t.id, t));
+    }
+  });
+  if (hits.size === 0) {
+    hits.set('T1078', {id:'T1078', name:'Valid Accounts', tac:'Defense Evasion/Persistence'});
+  }
+  return Array.from(hits.values());
+}
+
+// ------------------------------------------------------------
+// TEMPLATE FAMILIES — registry-based offline forge.
+//
+// Each family declares:
+//   id:         unique identifier
+//   label:      human-readable name
+//   matches(threat):   boolean predicate — does this threat apply?
+//   produce(threat, ctx): returns { detections, hunts, dataSources }
+//                        (ctx gives access to settings like cim, tstats)
+//
+// Add a new family by pushing to TEMPLATE_FAMILIES. The forgeSpl()
+// dispatcher runs every matching family and concatenates the results.
+// ------------------------------------------------------------
+
+// Match helper: keyword/regex hit in description, OR domain match.
+function familyMatch(threat, opts) {
+  const d = threat.description.toLowerCase();
+  if (opts.domains && opts.domains.includes(threat.domain)) return true;
+  if (opts.kws && opts.kws.some(k => d.includes(k))) return true;
+  if (opts.regex && opts.regex.some(r => r.test(d))) return true;
+  return false;
+}
+
+const TEMPLATE_FAMILIES = [
+
+  // ===========================================================
+  // AWS — IAM & CloudTrail
+  // ===========================================================
+  {
+    id: 'aws-iam',
+    label: 'AWS — IAM & CloudTrail',
+    matches: (t) => familyMatch(t, {
+      domains: ['cloud'],
+      kws: ['aws','cloudtrail','iam','access key','s3','ec2','sts','assumerole','assume role'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'AWS — Suspicious IAM User or Access Key Creation',
+        cim_data_model: 'Change',
+        risk: 'high',
+        spl: ctx.cim
+          ? `| tstats summariesonly=true count min(_time) as firstTime max(_time) as lastTime
+    from datamodel=Change
+    where Change.action=created
+      AND Change.object_category=user
+      AND (Change.object=*AccessKey* OR Change.object=*User*)
+    by Change.user Change.src Change.object Change.vendor_account Change.vendor_product
+| \`drop_dm_object_name("Change")\`
+| \`security_content_ctime(firstTime)\`
+| \`security_content_ctime(lastTime)\`
+| where NOT match(user, "^(terraform-|ci-|github-actions-|svc-).*")
+| where lastTime > relative_time(now(), "-24h@h")`
+          : `index=aws sourcetype=aws:cloudtrail earliest=-24h
+    (eventName=CreateAccessKey OR eventName=CreateUser OR eventName=CreateLoginProfile)
+    errorCode!=*
+| stats count min(_time) as firstTime max(_time) as lastTime
+        values(requestParameters.userName) as target_user
+        values(sourceIPAddress) as src_ip
+        values(userAgent) as ua
+        by userIdentity.arn eventName
+| eval firstTime=strftime(firstTime,"%Y-%m-%d %H:%M:%S"),
+       lastTime=strftime(lastTime,"%Y-%m-%d %H:%M:%S")
+| where NOT match(userIdentity.arn, "(terraform-|ci-|github-actions-|svc-)")
+| sort - count`,
+        why: 'Creating a new IAM user, access key, or login profile is an uncommon, high-privilege action. Legitimate automation has predictable principals; anything outside that list is suspect.',
+      });
+      detections.push({
+        title: 'AWS — Access Key Usage from Unexpected Geography',
+        cim_data_model: 'Authentication',
+        risk: 'high',
+        spl: `index=aws sourcetype=aws:cloudtrail userIdentity.type=IAMUser earliest=-24h
+| iplocation sourceIPAddress
+| eval principal=userIdentity.userName
+| stats count dc(Country) as countries values(Country) as country_list
+        values(sourceIPAddress) as src_ips
+        by principal
+| where countries > 1 OR NOT match(country_list, "United States")`,
+        why: 'Service account keys should have narrow geographic use. Two-country activity in a short window is a strong signal of key theft.',
+      });
+      detections.push({
+        title: 'AWS — Privilege Escalation via PolicyAttach',
+        cim_data_model: 'Change',
+        risk: 'critical',
+        spl: `index=aws sourcetype=aws:cloudtrail earliest=-24h
+    (eventName=AttachUserPolicy OR eventName=AttachRolePolicy OR eventName=PutUserPolicy OR eventName=PutRolePolicy)
+    requestParameters.policyArn IN ("*AdministratorAccess*","*PowerUserAccess*","*IAMFullAccess*")
+| stats count values(requestParameters.policyArn) as policies
+        values(requestParameters.userName) as target
+        values(sourceIPAddress) as src_ip
+        by userIdentity.arn`,
+        why: 'Attaching AdministratorAccess/PowerUserAccess/IAMFullAccess to any principal is a classic cloud privesc pattern. Always correlate with a ticket.',
+      });
+      hunts.push({
+        title: 'HUNT — Rare CloudTrail API Calls by Principal',
+        spl: `index=aws sourcetype=aws:cloudtrail earliest=-7d
+| stats count by userIdentity.arn eventName
+| eventstats sum(count) as principal_total by userIdentity.arn
+| eval rarity = round(count / principal_total, 4)
+| where rarity < 0.01 AND count < 5
+| sort userIdentity.arn rarity
+| eval note="First-time or extremely rare API for this principal in last 7d"`,
+        why: 'Surfaces API calls that are anomalous for a given principal compared to their own baseline — a strong hunt for novel adversary tradecraft in cloud controlplane.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['aws:cloudtrail'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // Azure / Entra ID
+  // ===========================================================
+  {
+    id: 'azure-entra',
+    label: 'Azure / Entra ID',
+    matches: (t) => familyMatch(t, {
+      kws: ['azure','entra','azuread','azure ad','app registration','service principal','conditional access'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'Entra ID — Service Principal Credential Added',
+        risk: 'high',
+        spl: `index=azure sourcetype=azure:audit earliest=-24h
+    operationName="Add service principal credentials"
+| spath input=properties output=props
+| stats count min(_time) as firstTime max(_time) as lastTime
+        values(initiatedBy.user.userPrincipalName) as actor
+        values(targetResources{}.displayName) as target_sp
+        values(result) as result
+        by correlationId
+| eval firstTime=strftime(firstTime,"%Y-%m-%d %H:%M:%S")
+| where NOT match(actor, "(^sync-|^svc-|^terraform-)")`,
+        why: 'Adding new secrets/certificates to a service principal is a stealthy persistence technique — the SP continues working, adversary has a parallel auth path.',
+      });
+      detections.push({
+        title: 'Entra ID — Dangerous Role Assignment',
+        risk: 'critical',
+        spl: `index=azure sourcetype=azure:audit earliest=-24h
+    operationName IN ("Add member to role","Add eligible member to role")
+| spath input=targetResources{}.modifiedProperties{} output=mp
+| search mp IN ("*Global Administrator*","*Privileged Role Administrator*","*Application Administrator*","*Cloud Application Administrator*")
+| stats count values(initiatedBy.user.userPrincipalName) as assigner
+        values(targetResources{}.userPrincipalName) as grantee
+        values(mp) as role
+        by correlationId`,
+        why: 'Global Admin, Privileged Role Admin, and Application Admin are the three roles most abused in post-compromise — monitor every assignment and challenge against a ticket.',
+      });
+      detections.push({
+        title: 'Entra ID — Conditional Access Policy Modified or Disabled',
+        risk: 'critical',
+        spl: `index=azure sourcetype=azure:audit earliest=-24h
+    (operationName="Update conditional access policy" OR operationName="Delete conditional access policy" OR operationName="Disable Strong Authentication")
+| stats count values(initiatedBy.user.userPrincipalName) as actor
+        values(targetResources{}.displayName) as policy
+        values(operationName) as op
+        by correlationId
+| where NOT match(actor, "(^svc-ca-|^break-glass-)")`,
+        why: 'Disabling or weakening a CA policy is a direct defense-evasion action. Expect this to fire rarely — if it does, treat it as an incident until proven otherwise.',
+      });
+      hunts.push({
+        title: 'HUNT — Anomalous OAuth Consent Grants (Entra)',
+        spl: `index=azure sourcetype=azure:audit earliest=-7d
+    operationName="Consent to application"
+| spath input=targetResources{}.modifiedProperties{} output=mp
+| stats count values(mp) as scopes
+        values(initiatedBy.user.userPrincipalName) as grantor
+        by targetResources{}.displayName
+| where count < 3
+| eval note="New apps with few grants — investigate for illicit consent"`,
+        why: 'Illicit consent grants are a standard phishing tradecraft: the adversary gets a persistent OAuth token that survives password resets. Surface rarely-seen apps.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['azure:audit','azure:signin'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // GCP
+  // ===========================================================
+  {
+    id: 'gcp',
+    label: 'GCP — Cloud Audit Logs',
+    matches: (t) => familyMatch(t, {
+      kws: ['gcp','google cloud','service account','gke','cloud run','cloud function','gsuite','workspace'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'GCP — Service Account Key Created',
+        risk: 'high',
+        spl: `index=gcp sourcetype=google:gcp:pubsub:message earliest=-24h
+    protoPayload.methodName="google.iam.admin.v1.CreateServiceAccountKey"
+| stats count min(_time) as firstTime max(_time) as lastTime
+        values(protoPayload.authenticationInfo.principalEmail) as actor
+        values(protoPayload.request.name) as target_sa
+        values(protoPayload.requestMetadata.callerIp) as src_ip
+        by resource.labels.project_id
+| where NOT match(actor, "(^terraform@|^ci-|^svc-)")`,
+        why: 'GCP service account keys are long-lived bearer credentials. Their creation should be rare and owned by IaC. Human-initiated creation is the suspect pattern.',
+      });
+      detections.push({
+        title: 'GCP — IAM Binding Added with Owner/Editor Role',
+        risk: 'critical',
+        spl: `index=gcp earliest=-24h
+    protoPayload.methodName IN ("SetIamPolicy","google.iam.admin.v1.SetIamPolicy")
+| spath input=protoPayload.serviceData.policyDelta.bindingDeltas{} output=deltas
+| search deltas="*roles/owner*" OR deltas="*roles/editor*" OR deltas="*roles/iam.securityAdmin*"
+| stats count values(protoPayload.authenticationInfo.principalEmail) as actor
+        values(deltas) as bindings
+        by resource.labels.project_id`,
+        why: 'Owner, Editor, and securityAdmin at project or organization scope are the terminal GCP privesc roles. Every binding needs justification.',
+      });
+      hunts.push({
+        title: 'HUNT — Rare GCP Admin Activity by Principal',
+        spl: `index=gcp earliest=-7d
+    protoPayload.methodName!=*list* protoPayload.methodName!=*get*
+| stats count dc(protoPayload.methodName) as method_variety
+        values(protoPayload.methodName) as methods
+        by protoPayload.authenticationInfo.principalEmail
+| eventstats avg(method_variety) as avg_variety
+| where method_variety > 2*avg_variety
+| sort - method_variety
+| eval note="Principals doing noticeably more admin action variety than baseline"`,
+        why: 'Volume alone is noisy in GCP. Breadth of API surface per principal is a stronger anomaly signal when combined with off-hours or unusual IPs.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['gcp:audit','google:gcp:pubsub:message'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // Kubernetes (audit + Falco)
+  // ===========================================================
+  {
+    id: 'kubernetes',
+    label: 'Kubernetes — audit + Falco',
+    matches: (t) => familyMatch(t, {
+      kws: ['kubernetes','k8s','kubelet','kubectl','pod','cluster role','clusterrole','falco','helm','gke','eks','aks'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'K8s — exec into Pod',
+        risk: 'high',
+        spl: `index=kube sourcetype=kube:audit earliest=-24h
+    verb=create objectRef.subresource=exec
+| stats count min(_time) as firstTime max(_time) as lastTime
+        values(user.username) as actor
+        values(objectRef.namespace) as ns
+        values(objectRef.name) as pod
+        values(sourceIPs{}) as src_ip
+        by user.username
+| where NOT match(actor, "(system:|kube-|^svc-)")`,
+        why: 'Interactive pod exec by a human is an auditable event in almost every org. Adversaries use it to pivot inside workload namespaces after compromising a kubeconfig.',
+      });
+      detections.push({
+        title: 'K8s — Privileged Pod or hostPath Mount Created',
+        risk: 'critical',
+        spl: `index=kube sourcetype=kube:audit earliest=-24h
+    verb=create objectRef.resource=pods
+| spath input=requestObject.spec.containers{}.securityContext.privileged output=priv
+| spath input=requestObject.spec.volumes{}.hostPath.path output=hostpath
+| where priv="true" OR isnotnull(hostpath)
+| stats count values(requestObject.metadata.name) as pod
+        values(user.username) as actor
+        values(hostpath) as hostpaths
+        values(objectRef.namespace) as ns
+        by user.username`,
+        why: 'Privileged=true or hostPath mounts are container-escape primitives. Legitimate use exists (kube-system DaemonSets); anything in a workload namespace is a flag.',
+      });
+      detections.push({
+        title: 'K8s — Secret Read Outside of Namespace Owner',
+        risk: 'high',
+        spl: `index=kube sourcetype=kube:audit earliest=-24h
+    verb=get objectRef.resource=secrets
+| stats count values(user.username) as actor
+        values(objectRef.name) as secret
+        by objectRef.namespace user.username
+| eventstats values(actor) as ns_actors by objectRef.namespace
+| where mvcount(ns_actors) > 5
+| eval note="High reader fan-out on secrets within a namespace — investigate"`,
+        why: 'If many principals suddenly read secrets in a single namespace, something has changed — either a rotation event or credential sweep.',
+      });
+      detections.push({
+        title: 'Falco — Shell Spawned in Container',
+        risk: 'high',
+        spl: `index=falco earliest=-24h
+    rule="*Terminal shell in container*" OR rule="*Launch Privileged Container*" OR rule="*Write below etc*"
+| stats count values(rule) as rules
+        values(output_fields.container.name) as container
+        values(output_fields.proc.cmdline) as cmdline
+        values(output_fields.k8s.ns.name) as ns
+        by output_fields.k8s.pod.name`,
+        why: 'Falco\'s shipped ruleset catches the actions that almost never happen in immutable containers. Treat a hit as "explain or contain."',
+      });
+      hunts.push({
+        title: 'HUNT — ServiceAccount Token Mount Abuse',
+        spl: `index=kube sourcetype=kube:audit earliest=-7d
+    user.username="system:serviceaccount:*"
+    (objectRef.resource=secrets OR objectRef.resource=configmaps OR objectRef.resource=pods)
+| stats count dc(objectRef.resource) as resources
+        values(objectRef.resource) as r_list
+        by user.username sourceIPs{}
+| sort - count
+| eval note="Service account reaching for unusual resources — token leak candidate"`,
+        why: 'Most service-account tokens have narrow intended use. Breadth of resource access from one SA is a strong indicator of token theft.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['kube:audit','falco'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // CI/CD — GitHub Actions
+  // ===========================================================
+  {
+    id: 'github-cicd',
+    label: 'GitHub — Actions & Audit',
+    matches: (t) => familyMatch(t, {
+      domains: ['cicd'],
+      kws: ['github','actions','workflow','pull request','pull_request_target','pat','personal access token'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'GitHub — Secret Added to Workflow or Repo Without Approval',
+        cim_data_model: 'Change',
+        risk: 'high',
+        spl: `index=github sourcetype=github:audit earliest=-24h
+    (action=org.update_actions_secret OR action=repo.update_actions_secret
+     OR action=environment.update_actions_secret OR action=secret_scanning_alert.resolve)
+| stats count min(_time) as firstTime max(_time) as lastTime
+        values(repo) as repos
+        values(actor) as actor
+        values(action) as actions
+        by org actor_ip
+| where NOT match(actor, "(^dependabot|^renovate|^svc-)")`,
+        why: 'Adversaries with stolen GitHub tokens commonly plant their own secrets (webhooks, exfil endpoints) to establish C2 from CI. Correlate actor + IP + repo.',
+      });
+      detections.push({
+        title: 'GitHub Actions — Self-Hosted Runner Registered',
+        risk: 'critical',
+        spl: `index=github sourcetype=github:audit earliest=-24h action=self_hosted_runner.*
+| stats count min(_time) as firstTime max(_time) as lastTime
+        values(action) as actions values(repo) as repos
+        by actor actor_ip
+| where NOT match(actor, "(^svc-|^ops-)")`,
+        why: 'A self-hosted runner registered by a developer account (not ops) is a classic persistence foothold — any workflow pull-requested against the repo runs on attacker-controlled infra.',
+      });
+      detections.push({
+        title: 'GitHub — pull_request_target Workflow Modified',
+        risk: 'high',
+        spl: `index=github sourcetype=github:audit action=git.push earliest=-7d
+| search modified_files="*workflows*" OR added_files="*workflows*"
+| rex field=_raw "(?<trigger>pull_request_target)"
+| where isnotnull(trigger) OR isnotnull(added_trigger)
+| stats count values(repo) as repos values(modified_files) as files
+        by actor actor_ip`,
+        why: 'pull_request_target runs with repo secrets on PR contents — the canonical supply-chain foothold for any forked PR. Any workflow using this trigger needs review.',
+      });
+      hunts.push({
+        title: 'HUNT — Workflow Files Modified to Exfil Secrets',
+        spl: `index=github sourcetype=github:audit action=git.push earliest=-7d
+| search added_files=*.yml OR modified_files=*.yml OR added_files=*.yaml OR modified_files=*.yaml
+| search (added_files="*workflows*" OR modified_files="*workflows*")
+| eval commit_author=coalesce(author, actor)
+| stats values(repo) as repos values(commit_sha) as shas values(modified_files) as files count
+        by commit_author actor_ip
+| where count > 0
+| eval note="Review these workflow diffs for: curl/wget to unknown hosts, base64 piped to sh, echo \$\{{ secrets.* \}} to files, unusual 'run:' steps"`,
+        why: 'Attackers who phish a maintainer token tend to modify workflows to print secrets or post them to attacker infra. Review diffs for every hit.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['github:audit'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // GitLab CI
+  // ===========================================================
+  {
+    id: 'gitlab-ci',
+    label: 'GitLab CI',
+    matches: (t) => familyMatch(t, {
+      kws: ['gitlab','gitlab ci','ci_job_token','ci_runner','masked variable','.gitlab-ci.yml'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'GitLab — Masked CI Variable Added or Modified',
+        risk: 'high',
+        spl: `index=gitlab sourcetype=gitlab:audit earliest=-24h
+    (entity_type=Project OR entity_type=Group)
+    (event_name=ci_variable_created OR event_name=ci_variable_updated)
+| stats count values(author_name) as actor
+        values(entity_path) as path
+        values(details.key) as var_name
+        values(ip_address) as src_ip
+        by id
+| where NOT match(actor, "(^svc-|^deploy-)")`,
+        why: 'Masked CI variables are the #1 GitLab exfil target. Any add/modify by a non-automation account warrants attention.',
+      });
+      detections.push({
+        title: 'GitLab — Runner Token Registered',
+        risk: 'critical',
+        spl: `index=gitlab sourcetype=gitlab:audit earliest=-24h
+    event_name=ci_runner_registered
+| stats count values(author_name) as actor
+        values(details.runner_type) as runner_type
+        values(details.runner_description) as descr
+        values(ip_address) as src_ip
+        by entity_path`,
+        why: 'Registering a rogue GitLab runner gives the attacker arbitrary code execution on pipeline jobs. The runner description is attacker-controlled — look for odd or empty values.',
+      });
+      detections.push({
+        title: 'GitLab — Protected Branch Deploy Key or Access Token Added',
+        risk: 'high',
+        spl: `index=gitlab sourcetype=gitlab:audit earliest=-24h
+    (event_name=deploy_key_added OR event_name=project_access_token_created OR event_name=group_access_token_created)
+| stats count values(author_name) as actor
+        values(entity_path) as path
+        values(details.target_details) as target
+        by id`,
+        why: 'Deploy keys and project access tokens are long-lived and easy to exfiltrate later. Every addition should tie back to a specific pipeline need.',
+      });
+      hunts.push({
+        title: 'HUNT — CI_JOB_TOKEN Used Outside of Own Project',
+        spl: `index=gitlab sourcetype=gitlab:access earliest=-7d
+    auth_method=ci_job_token
+| stats count dc(project_path) as proj_count
+        values(project_path) as accessed_projects
+        by job_project_path
+| where proj_count > 1
+| eval note="Job token accessing projects other than its own — permission scope review needed"`,
+        why: 'CI_JOB_TOKEN reaching outside its own project is a GitLab-specific pivot pattern tied to CVE-2024-5655-class vulnerabilities.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['gitlab:audit','gitlab:access'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // CircleCI / Jenkins
+  // ===========================================================
+  {
+    id: 'jenkins-circleci',
+    label: 'Jenkins / CircleCI',
+    matches: (t) => familyMatch(t, {
+      kws: ['circleci','orb','context','jenkins','jenkinsfile','groovy','agent.jar','build node'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'Jenkins — Script Console Used by Non-Admin Path',
+        risk: 'critical',
+        spl: `index=jenkins sourcetype=jenkins:audit earliest=-24h
+    (url="*/script*" OR url="*/scriptText*" OR log_message="*Running Groovy script*")
+| stats count values(user) as actor
+        values(src_ip) as src_ip
+        values(url) as urls
+        by user
+| where NOT match(actor, "(^admin-|^ops-)")`,
+        why: 'The Jenkins script console runs arbitrary Groovy with controller privileges — a known foothold for full Jenkins compromise.',
+      });
+      detections.push({
+        title: 'Jenkins — Plugin Installed Outside Maintenance Window',
+        risk: 'high',
+        spl: `index=jenkins sourcetype=jenkins:audit earliest=-24h
+    message="*plugin installed*" OR message="*plugin uploaded*"
+| eval hour=tonumber(strftime(_time, "%H"))
+| where hour < 8 OR hour > 18
+| stats count values(user) as actor values(message) as events by user`,
+        why: 'Jenkins plugins execute within the controller. Install outside a maintenance window is a classic supply-chain foothold — especially with self-compiled or sideloaded .hpi files.',
+      });
+      detections.push({
+        title: 'CircleCI — Context Read from Unusual Job',
+        risk: 'high',
+        spl: `index=circleci sourcetype=circleci:audit earliest=-7d
+    action=context.read OR action=context.variable.read
+| stats count values(actor.login) as actor
+        values(project.slug) as project
+        values(payload.context_name) as ctx_name
+        values(src_ip) as src_ip
+        by job.id
+| eventstats dc(project.slug) as project_count by actor.login
+| where project_count > 3
+| eval note="Actor reading contexts across many projects — pivot indicator"`,
+        why: 'CircleCI contexts hold secrets shared across orgs. A pattern of cross-project context reads from one actor is a pivot signal.',
+      });
+      hunts.push({
+        title: 'HUNT — Unusual Shell Invocations in CI Jobs',
+        spl: `index=cicd (sourcetype=jenkins:build OR sourcetype=circleci:job) earliest=-7d
+| rex field=_raw "(?<bad_cmd>curl\\s+[^\\s]*(whoami|env|ifconfig)|base64\\s+-d\\s*\\|\\s*sh|wget\\s+\\|\\s*sh|nc\\s+[0-9.]+\\s+\\d+)"
+| where isnotnull(bad_cmd)
+| stats count values(bad_cmd) as matches
+        values(project) as project
+        values(job_name) as job
+        by job_id
+| eval note="Inspect build logs — shell patterns commonly used for discovery or reverse shell in CI"`,
+        why: 'CI runners with internet egress are adversary landing pads. These command patterns rarely appear in legitimate builds.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['jenkins:audit','circleci:audit','jenkins:build','circleci:job'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // Terraform Cloud / Pulumi / IaC
+  // ===========================================================
+  {
+    id: 'iac',
+    label: 'Terraform Cloud / Pulumi',
+    matches: (t) => familyMatch(t, {
+      kws: ['terraform','terraform cloud','tfc','cloudformation','iac','pulumi','workspace variable'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'Terraform Cloud — Sensitive Workspace Variable Accessed or Modified',
+        risk: 'high',
+        spl: `index=tfc sourcetype=tfc:audit earliest=-24h
+    (action="workspace_variable.update" OR action="workspace_variable.create" OR action="workspace_variable.destroy")
+    details.sensitive=true
+| stats count values(actor.username) as actor
+        values(workspace.name) as workspace
+        values(details.key) as var_key
+        values(src_ip) as src_ip
+        by id
+| where NOT match(actor, "(^svc-|^ci-)")`,
+        why: 'Sensitive workspace variables hold cloud credentials. Manual edits by humans are rare — every one should be documented in a change ticket.',
+      });
+      detections.push({
+        title: 'Terraform Cloud — Destructive Run Outside Change Window',
+        risk: 'critical',
+        spl: `index=tfc sourcetype=tfc:run earliest=-24h
+    (has_changes.destroy=true OR plan.resource_destructions>0)
+| eval hour=tonumber(strftime(_time, "%H"))
+| eval dow=strftime(_time, "%A")
+| where (hour < 8 OR hour > 18) OR dow IN ("Saturday","Sunday")
+| stats count values(actor.username) as actor
+        values(workspace.name) as ws
+        values(plan.resource_destructions) as destroys
+        by run.id`,
+        why: 'Destructive Terraform runs in off-hours are a high-signal event — either an emergency (justified in a ticket) or an adversary destroying evidence.',
+      });
+      detections.push({
+        title: 'Terraform — API Token Used from New IP',
+        risk: 'high',
+        spl: `index=tfc sourcetype=tfc:api earliest=-24h auth_method=api_token
+| iplocation src_ip
+| stats earliest(_time) as first_seen dc(src_ip) as ip_count
+        values(src_ip) as ips values(Country) as countries
+        by token.id actor.username
+| eventstats earliest(first_seen) as ever_first by token.id
+| where first_seen=ever_first AND first_seen > relative_time(now(), "-24h")
+| eval note="Token first used from a new IP in the last 24 hours"`,
+        why: 'TFC API tokens are high-value — rotation is infrequent and they authorize state mutation. First-use from a new IP is a high-fidelity signal.',
+      });
+      hunts.push({
+        title: 'HUNT — Plan/Apply Resource Diffs Worth Reviewing',
+        spl: `index=tfc sourcetype=tfc:run earliest=-7d plan.resource_additions>0
+| rex field=plan_output max_match=0 "(?<iam_add>aws_iam_(user|role|access_key|policy_attachment)\\.\\w+)"
+| rex field=plan_output max_match=0 "(?<sg_open>aws_security_group_rule.*from_port\\s*=\\s*0)"
+| where isnotnull(iam_add) OR isnotnull(sg_open)
+| stats count values(iam_add) as iam_changes values(sg_open) as sg_changes
+        values(workspace.name) as ws
+        by actor.username
+| eval note="Plans touching IAM or opening wide-open security groups — review before approval"`,
+        why: 'Most damaging IaC changes are small but high-blast-radius. Highlight IAM and network-policy diffs for human approval, even in approved workspaces.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['tfc:audit','tfc:run','tfc:api'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // OAuth / SAML abuse
+  // ===========================================================
+  {
+    id: 'oauth-saml',
+    label: 'OAuth / SAML Abuse',
+    matches: (t) => familyMatch(t, {
+      kws: ['oauth','consent grant','illicit consent','admin consent','enterprise app','saml','assertion','golden saml'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'OAuth — Illicit Consent Grant to New Enterprise App',
+        risk: 'high',
+        spl: `index=azure sourcetype=azure:audit earliest=-24h
+    (operationName="Consent to application" OR operationName="Add OAuth2PermissionGrant")
+| spath input=targetResources{}.modifiedProperties{} output=mp
+| search mp IN ("*Mail.ReadWrite*","*Files.Read.All*","*User.Read.All*","*Directory.Read.All*","*full_access*")
+| stats count values(initiatedBy.user.userPrincipalName) as grantor
+        values(mp) as scopes
+        values(targetResources{}.displayName) as app
+        by correlationId
+| eval note="High-privilege OAuth scopes granted — treat as probable illicit consent"`,
+        why: 'The canonical BEC / post-phish persistence move: trick a user into consenting to an attacker-owned app with Mail and File scopes. Survives password resets.',
+      });
+      detections.push({
+        title: 'App Registration — High-Privilege API Permissions Added',
+        risk: 'critical',
+        spl: `index=azure sourcetype=azure:audit earliest=-24h
+    operationName IN ("Update application","Add app role assignment to service principal")
+| spath input=targetResources{}.modifiedProperties{} output=mp
+| search mp IN ("*RoleManagement.ReadWrite.Directory*","*AppRoleAssignment.ReadWrite.All*","*Application.ReadWrite.All*")
+| stats count values(initiatedBy.user.userPrincipalName) as actor
+        values(targetResources{}.displayName) as app
+        values(mp) as perms
+        by correlationId`,
+        why: 'RoleManagement/AppRoleAssignment/Application.ReadWrite are the "become admin via app" escalation primitives. Every grant needs explicit sign-off.',
+      });
+      detections.push({
+        title: 'SAML — Token Signing Certificate Changed',
+        risk: 'critical',
+        spl: `index=azure sourcetype=azure:audit earliest=-7d
+    (operationName="Update application - Certificates and secrets management"
+     OR operationName="Set federation settings on domain"
+     OR operationName="Update domain")
+| stats count values(initiatedBy.user.userPrincipalName) as actor
+        values(targetResources{}.displayName) as target
+        values(src_ip) as src_ip
+        by correlationId`,
+        why: 'SAML signing cert changes are the indicator for Golden SAML. Rare event by design — anything here should be tied to a documented cert rotation.',
+      });
+      hunts.push({
+        title: 'HUNT — New Enterprise Apps per User (Baseline Deviation)',
+        spl: `index=azure sourcetype=azure:signin earliest=-30d
+| stats dc(appId) as app_variety values(appDisplayName) as apps
+        by userPrincipalName
+| eventstats avg(app_variety) as avg_app
+| where app_variety > 2*avg_app
+| sort - app_variety
+| eval note="Users consenting to or using noticeably more apps than the average"`,
+        why: 'Variety of OAuth-consented apps per user is an unusually clean baseline — outliers are either power users (few) or adversary-impersonated (many).',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['azure:audit','azure:signin','okta:system'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // Identity / Okta (Evilginx-style session theft)
+  // ===========================================================
+  {
+    id: 'okta-idp',
+    label: 'Okta / IdP',
+    matches: (t) => familyMatch(t, {
+      domains: ['identity'],
+      kws: ['okta','session','cookie','evilginx','sso','mfa'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'Okta — Session Token Use from Impossible Travel',
+        cim_data_model: 'Authentication',
+        risk: 'high',
+        spl: ctx.cim
+          ? `| tstats summariesonly=true count min(_time) as firstTime max(_time) as lastTime
+    from datamodel=Authentication
+    where Authentication.vendor="okta" Authentication.action=success
+    by Authentication.user Authentication.src _time
+| \`drop_dm_object_name("Authentication")\`
+| iplocation src
+| streamstats window=2 current=true
+    values(Country) as countries values(src) as srcs values(_time) as times by user
+| where mvcount(countries) > 1
+| eval dt = mvindex(times,0) - mvindex(times,1)
+| where abs(dt) < 3600`
+          : `index=okta eventType=user.session.start outcome.result=SUCCESS earliest=-24h
+| iplocation client.ipAddress
+| rename actor.alternateId as user
+| streamstats window=2 current=true
+    values(Country) as countries values(client.ipAddress) as srcs
+    values(_time) as times by user
+| where mvcount(countries) > 1
+| eval dt = mvindex(times,0) - mvindex(times,1)
+| where abs(dt) < 3600
+| table user countries srcs dt`,
+        why: 'Legitimate users don\'t teleport. Two distinct countries within 60 minutes for the same Okta session is a high-fidelity session-theft indicator.',
+      });
+      detections.push({
+        title: 'Okta — MFA Factor Enrolled by Admin Outside Ticket Window',
+        risk: 'medium',
+        spl: `index=okta earliest=-24h
+    (eventType=user.mfa.factor.update OR eventType=user.mfa.factor.activate OR eventType=user.mfa.factor.reset_all)
+| stats count min(_time) as firstTime max(_time) as lastTime
+        values(actor.alternateId) as admin
+        values(target{}.alternateId) as target
+        values(outcome.result) as result
+        by eventType client.ipAddress
+| eval firstTime=strftime(firstTime,"%Y-%m-%d %H:%M:%S")`,
+        why: 'Enrolling a new MFA factor on a privileged account is a post-compromise persistence step. Correlate against your help-desk ticketing system.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['okta:system'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // Supply chain / package registries
+  // ===========================================================
+  {
+    id: 'supply-chain',
+    label: 'Supply Chain — Package Registries',
+    matches: (t) => familyMatch(t, {
+      domains: ['supply-chain'],
+      kws: ['npm','pypi','dependency','package','maven','ruby','gem','cargo','composer','typosquat'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'CI — Package Install from Unexpected Registry',
+        risk: 'high',
+        spl: `index=cicd earliest=-24h (sourcetype=ci:build OR sourcetype=github:actions)
+    (command="*npm install*" OR command="*pip install*" OR command="*yarn add*")
+| rex field=command "(?<registry>--registry[= ]\\S+|--index-url[= ]\\S+)"
+| where isnotnull(registry)
+| stats count values(command) as cmds values(repo) as repos
+        by registry
+| where NOT match(registry, "(registry\\.npmjs\\.org|pypi\\.org|pypi\\.python\\.org|artifactory\\.corp)")`,
+        why: 'Dependency confusion and typosquatting attacks often require overriding the registry URL. Anything not on your allowlist is worth investigating.',
+      });
+      detections.push({
+        title: 'Runner — Outbound Network During Dependency Install',
+        risk: 'high',
+        spl: `index=cicd sourcetype=ci:build earliest=-24h
+    (command="*npm install*" OR command="*pip install*" OR command="*yarn*" OR command="*bundle install*")
+| join job_id [ search index=network sourcetype=zeek:conn earliest=-24h src_ip IN (<known_runner_cidr>)
+                 | eval job_id=job_id ]
+| stats count values(dest_ip) as dest values(dest_port) as ports
+        by job_id repo
+| where count > 0 AND NOT match(dest, "(registry\\.npmjs|pypi|artifactory|github|amazonaws)")`,
+        why: 'Malicious postinstall scripts beacon out during install. The natural correlation is build-step-start × runner-egress, scoped to install-family commands.',
+      });
+      hunts.push({
+        title: 'HUNT — New First-Party Dependencies in Last 30 Days',
+        spl: `index=cicd sourcetype=ci:dependency-manifest earliest=-30d
+| stats min(_time) as first_seen values(version) as versions by package
+| eval first_seen_ago = round((now()-first_seen)/86400, 1)
+| where first_seen_ago < 30
+| sort first_seen
+| eval note="Investigate maintainer history, install scripts, and typo-distance from popular packages"`,
+        why: 'New dependencies introduced in the last 30 days are a high-value review surface for supply-chain threats, especially if they share prefix/suffix with popular packages.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['ci:build','ci:dependency-manifest','github:actions'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // Secrets scanners (TruffleHog / Gitleaks)
+  // ===========================================================
+  {
+    id: 'secrets-scanners',
+    label: 'Secrets Scanners',
+    matches: (t) => familyMatch(t, {
+      kws: ['trufflehog','gitleaks','detect-secrets','leaked secret','exposed key','secret scanner','.env'],
+    }),
+    produce: (threat, ctx) => {
+      const detections = [];
+      const hunts = [];
+      detections.push({
+        title: 'Secrets Scanner — High-Confidence Verified Finding',
+        risk: 'critical',
+        spl: `index=secrets (sourcetype=trufflehog OR sourcetype=gitleaks) earliest=-24h
+    (verified=true OR confidence>=0.9)
+| stats count values(detector.name) as detector
+        values(source.file) as file
+        values(source.repo) as repo
+        values(source.commit) as commit
+        by detector.name source.repo`,
+        why: 'Verified findings from TruffleHog/Gitleaks mean the credential actually works right now. Treat every unique hit as an incident until rotated.',
+      });
+      detections.push({
+        title: 'Secret Committed to main/master Branch',
+        risk: 'high',
+        spl: `index=secrets sourcetype=trufflehog earliest=-24h
+    source.branch IN ("main","master")
+    verified=true
+| stats count values(detector.name) as detector
+        values(source.file) as file
+        values(source.commit) as commit
+        values(source.author) as author
+        by source.repo`,
+        why: 'Secrets on the default branch enter the build/deploy path immediately and are hardest to retract. Trunk-branch findings deserve higher priority than feature-branch noise.',
+      });
+      hunts.push({
+        title: 'HUNT — Historical Secrets Never Rotated',
+        spl: `index=secrets sourcetype=trufflehog earliest=-90d
+| stats earliest(_time) as first_seen latest(_time) as last_seen
+        values(source.repo) as repos
+        by detector.name raw
+| eval age_days=round((now()-first_seen)/86400, 0)
+| where age_days > 30 AND last_seen > relative_time(now(), "-7d")
+| sort - age_days
+| eval note="Same secret string still detected more than 30 days after first-seen — likely never rotated"`,
+        why: 'A secret seen continuously for >30 days after first detection is almost certainly live and never rotated — a latent credential exposure worth prioritizing.',
+      });
+      return {
+        detections, hunts,
+        dataSources: ['trufflehog','gitleaks'],
+      };
+    },
+  },
+
+  // ===========================================================
+  // Generic fallback (used only if nothing else matched)
+  // ===========================================================
+  {
+    id: 'generic',
+    label: 'Generic — Authentication Baseline',
+    matches: () => false, // only used as explicit fallback
+    produce: () => {
+      return {
+        detections: [{
+          title: 'Generic — Unusual Authentication Activity',
+          cim_data_model: 'Authentication',
+          risk: 'low',
+          spl: `| tstats summariesonly=true count min(_time) as firstTime max(_time) as lastTime
+    from datamodel=Authentication
+    where Authentication.action=success
+    by Authentication.user Authentication.src Authentication.app
+| \`drop_dm_object_name("Authentication")\`
+| stats count dc(src) as unique_src dc(app) as unique_app
+        values(src) as sources values(app) as apps
+        by user
+| where unique_src > 3 OR unique_app > 5`,
+          why: 'Auto-generated fallback: review authentication breadth per principal. Refine against the threat description for a better rule.',
+        }],
+        hunts: [],
+        dataSources: ['generic:authentication'],
+      };
+    },
+  },
+];
+
+// ------------------------------------------------------------
+// forgeSpl — dispatches the threat across all matching families.
+// ------------------------------------------------------------
+function forgeSpl(threat, mitre) {
+  const ctx = {
+    cim: state.settings.cim,
+    tstats: state.settings.tstats,
+  };
+
+  const detections = [];
+  const hunts = [];
+  const dataSources = new Set();
+  const appliedFamilies = [];
+
+  TEMPLATE_FAMILIES.forEach(fam => {
+    if (fam.id === 'generic') return; // reserved for fallback
+    try {
+      if (!fam.matches(threat)) return;
+      const out = fam.produce(threat, ctx);
+      if (out) {
+        if (out.detections) out.detections.forEach(d => detections.push({ ...d, family: fam.id }));
+        if (out.hunts)      out.hunts.forEach(h => hunts.push({ ...h, family: fam.id }));
+        if (out.dataSources) out.dataSources.forEach(s => dataSources.add(s));
+        appliedFamilies.push(fam.id);
+      }
+    } catch (e) {
+      console.warn(`[forge] family ${fam.id} threw`, e);
+    }
+  });
+
+  // Fallback if no family matched.
+  if (detections.length === 0) {
+    const gen = TEMPLATE_FAMILIES.find(f => f.id === 'generic').produce(threat, ctx);
+    gen.detections.forEach(d => detections.push({ ...d, family: 'generic' }));
+    gen.hunts.forEach(h => hunts.push({ ...h, family: 'generic' }));
+    gen.dataSources.forEach(s => dataSources.add(s));
+    appliedFamilies.push('generic');
+  }
+
+  return {
+    detections, hunts,
+    dataSources: Array.from(dataSources),
+    appliedFamilies,
+  };
+}
+
+function buildTriage(threat, mitre) {
+  return `INITIAL TRIAGE — ${threat.name || 'Unnamed Threat'}
+
+1. VALIDATE THE ALERT
+   • Confirm the triggering event is not from an approved change window, break-glass, or planned deployment.
+   • Cross-reference the actor/principal against your IAM or HR directory. Is this a human, service account, or a compromised CI runner?
+   • Check the source IP against your known-egress ranges, VPN pools, and cloud provider CIDRs.
+
+2. SCOPE IMPACT
+   • What resources, repos, or accounts does the principal have access to? Pull the full policy/role graph.
+   • What has this principal done in the last 24–72 hours? Review CloudTrail / GitHub audit / Okta system log.
+   • Identify downstream blast radius — any resources the principal could have modified, exfiltrated, or backdoored.
+
+3. CONTAIN
+   • Rotate the suspect credential immediately (access key, PAT, session, password + MFA reset).
+   • Revoke active sessions in your IDP.
+   • If a CI/CD pipeline is involved, freeze deployments to affected environments and pull merge permissions.
+
+4. ERADICATE & RECOVER
+   • Remove any adversary persistence: new IAM users, new MFA factors, added SSH keys, deployed self-hosted runners, new OAuth apps, pinned GitHub Actions, added webhooks.
+   • Restore from known-good IaC / git history. Do not trust build artifacts produced during the suspect window.
+   • Invalidate any secrets that were reachable from the pipeline during the window.
+
+5. LESSONS LEARNED
+   • Is this detection firing reliably? Tune against the last 30 days of data.
+   • Add any new IOCs (IPs, user-agents, usernames, commit SHAs) to your watchlists.
+   • MITRE mapping: ${mitre.map(m=>m.id).join(', ')}`;
+}
+
+function buildResponse(threat) {
+  return `RESPONSE PLAYBOOK — ${threat.name || 'Unnamed Threat'}
+
+CONTAINMENT
+  [ ] Disable the compromised principal in IDP (Okta/Entra): suspend user, revoke refresh tokens.
+  [ ] Rotate all credentials the principal had access to: service account keys, PATs, webhook secrets.
+  [ ] Remove any persistence artifacts: new users/keys/factors/runners/OAuth apps.
+  [ ] Block the adversary IPs at your cloud WAF / firewall edge.
+  [ ] If CI/CD: revoke deploy keys, freeze production pipelines, require re-approval for all merges.
+
+COMMUNICATIONS
+  [ ] Page the on-call owner of the affected service.
+  [ ] Notify Security Leadership via incident channel. Open ticket in IR tracker.
+  [ ] If customer data or prod is impacted, engage Legal/Privacy for breach-notification evaluation.
+
+EVIDENCE PRESERVATION
+  [ ] Snapshot CloudTrail / audit logs for the full attack window + 72 hours buffer.
+  [ ] Preserve any affected EC2/compute instances as forensic images before termination.
+  [ ] Git history: tag and protect any commit SHAs authored by the compromised identity.
+
+ERADICATION
+  [ ] Identify and remove all adversary-planted artifacts. Verify against IaC baseline.
+  [ ] Re-provision infra from trusted state where there's any doubt.
+  [ ] Rebuild container images from verified base images; do not trust cached layers.
+
+RECOVERY
+  [ ] Re-enable user with forced MFA re-enrollment and password reset.
+  [ ] Verify business operations. Smoke-test affected services.
+  [ ] Monitor for 14 days post-incident for resurgence indicators.
+
+POST-INCIDENT
+  [ ] Run blameless retro within 5 business days.
+  [ ] File detection-engineering follow-ups for any gaps.
+  [ ] Update this playbook with new findings.`;
+}
+
+// ------------------------------------------------------------
+// LLM FORGE — uses selected provider
+// ------------------------------------------------------------
+const SYSTEM_PROMPT = `You are a senior detection engineer and threat hunter who writes production-grade Splunk SPL. Given a threat description, produce a complete detection package.
+
+CONSTRAINTS:
+- Output valid JSON only, no prose outside JSON, no markdown code fences.
+- SPL must be syntactically valid: use real command names (search, stats, tstats, eval, rex, iplocation, where, table, sort, fields, lookup, eventstats, streamstats, bin, bucket, join, append, appendcols, rename, mvexpand, spath, makemv, etc.)
+- Prefer CIM data models (Authentication, Change, Network_Traffic, Endpoint, Web, Malware) with tstats when "cim" is true.
+- Include reasonable time windows (earliest=-24h, -7d, etc.).
+- Each detection must have an explicit reason it flags adversary behavior and not legitimate activity.
+- Map to MITRE ATT&CK technique IDs that actually correspond to the tradecraft described.
+- Hunt queries are exploratory — they must use aggregation/baselining (stats, eventstats, streamstats, rare, anomalydetection).
+
+OUTPUT SCHEMA (strict):
+{
+  "name": "string - short codename",
+  "summary": "string - 2-3 sentences",
+  "mitre": [{"id":"T1098","name":"...","tactic":"..."}],
+  "data_sources": ["aws:cloudtrail", "okta", ...],
+  "detections": [{
+    "title":"string",
+    "risk":"low|medium|high|critical",
+    "cim_data_model":"string or null",
+    "spl":"string (multi-line SPL)",
+    "why":"string - why this catches the adversary and not normal activity"
+  }],
+  "hunts": [{
+    "title":"string",
+    "spl":"string (multi-line SPL)",
+    "why":"string"
+  }],
+  "triage":"string - numbered triage steps (multi-line)",
+  "response":"string - response playbook with checkboxes (multi-line)"
+}`;
+
+function buildUserPrompt(threat) {
+  const refs = Object.entries(state.urlContexts).map(([u, t]) =>
+    `--- SOURCE: ${u} ---\n${t}\n`).join('\n');
+
+  return `THREAT DESCRIPTION:
+${threat.description}
+
+CONTEXT:
+- Codename: ${threat.name || '(none)'}
+- Primary domain: ${threat.domain}
+- Settings: cim=${state.settings.cim} tstats=${state.settings.tstats} mitre=${state.settings.mitre}
+
+${refs ? 'REFERENCE MATERIAL (treat as authoritative ground truth for any CVE/technique details):\n' + refs : ''}
+
+Produce the detection package JSON now.`;
+}
+
+async function callLlm(threat) {
+  const p = state.llm.providers.find(x => x.id === state.llm.selected);
+  if (!p || p.provider === 'offline') return null;
+
+  const key = state.llm.keys[p.id];
+  if (p.needsKey && !key) {
+    log(`No API key set for ${p.name}. Add one in the inspector.`, 'err');
+    return null;
+  }
+
+  const userPrompt = buildUserPrompt(threat);
+
+  if (p.provider === 'anthropic') {
+    return await callAnthropic(p, key, userPrompt);
+  } else if (p.provider === 'openai' || p.provider === 'openai-compatible') {
+    return await callOpenAI(p, key, userPrompt);
+  } else if (p.provider === 'gemini') {
+    return await callGemini(p, key, userPrompt);
+  }
+  return null;
+}
+
+async function callAnthropic(p, key, user) {
+  const resp = await fetch(p.endpoint, {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: p.model,
+      max_tokens: 4096,
+      temperature: state.settings.temperature,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: user }],
+    }),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`Anthropic ${resp.status}: ${txt.slice(0,200)}`);
+  }
+  const data = await resp.json();
+  const text = data.content.map(b => b.text || '').join('');
+  return extractJson(text);
+}
+
+async function callOpenAI(p, key, user) {
+  const headers = { 'content-type': 'application/json' };
+  if (key) headers['authorization'] = `Bearer ${key}`;
+  const resp = await fetch(p.endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: p.model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: user },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: state.settings.temperature,
+    }),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`OpenAI-compat ${resp.status}: ${txt.slice(0,200)}`);
+  }
+  const data = await resp.json();
+  const text = data.choices?.[0]?.message?.content || '';
+  return extractJson(text);
+}
+
+async function callGemini(p, key, user) {
+  const url = `${p.endpoint}/${p.model}:generateContent?key=${encodeURIComponent(key)}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: state.settings.temperature },
+    }),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`Gemini ${resp.status}: ${txt.slice(0,200)}`);
+  }
+  const data = await resp.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return extractJson(text);
+}
+
+function extractJson(text) {
+  if (!text) return null;
+  // strip code fences if any
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  // find first { ... last }
+  const a = text.indexOf('{');
+  const b = text.lastIndexOf('}');
+  if (a === -1 || b === -1) return null;
+  try { return JSON.parse(text.slice(a, b+1)); } catch (e) {
+    log(`LLM returned unparseable JSON. Falling back to offline forge.`, 'warn');
+    return null;
+  }
+}
+
+// ------------------------------------------------------------
+// FORGE ORCHESTRATOR
+// ------------------------------------------------------------
+async function forge() {
+  const desc = document.getElementById('threat-desc').value.trim();
+  if (!desc) {
+    log('Enter a threat description first.', 'err');
+    return;
+  }
+  const name   = document.getElementById('threat-name').value.trim();
+  const domain = document.getElementById('threat-domain').value;
+
+  clearLog();
+  setStatus('Forging');
+  document.getElementById('btn-forge').disabled = true;
+
+  const threat = {
+    id: `t_${Date.now().toString(36)}`,
+    name, description: desc, domain,
+    urls: state.urls.slice(),
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    // 1. optionally ingest URLs
+    if (state.settings.fetch && state.urls.length > 0 &&
+        Object.keys(state.urlContexts).length < state.urls.length) {
+      log('Ingesting reference URLs...');
+      await ingestUrls();
+    }
+
+    // 2. Decide the forge path.
+    //
+    // Rule: the selected LLM in the sidebar is AUTHORITATIVE. Only three
+    // things route to the offline forge:
+    //   (a) user explicitly selected the "Offline Forge" provider, OR
+    //   (b) "Force Offline" toggle is ON (air-gap mode), OR
+    //   (c) the LLM call fails — and even then we SHOUT about it.
+    //
+    // We never silently redirect an LLM request to the offline engine.
+    let pkg = null;
+    let fallbackReason = null;
+    const provider = state.llm.providers.find(x => x.id === state.llm.selected);
+
+    const forceOffline       = !!state.settings.force_offline;
+    const selectedIsOffline  = provider && provider.provider === 'offline';
+    const providerNeedsKey   = provider && provider.needsKey && !state.llm.keys[provider.id];
+
+    if (forceOffline) {
+      log(`⚠ Force Offline is ON — bypassing ${provider ? provider.name : 'LLM'}.`, 'warn');
+    } else if (selectedIsOffline) {
+      log('Using Offline Forge (explicitly selected).', 'ok');
+    } else if (providerNeedsKey) {
+      log(`⚠ ${provider.name} selected but no API key configured. Falling back to offline forge.`, 'err');
+      fallbackReason = `${provider.name}: missing API key`;
+    } else {
+      log(`Calling ${provider.name} (temp=${state.settings.temperature})...`);
+      try {
+        const t0 = performance.now();
+        const llmResult = await callLlm(threat);
+        const dt = Math.round(performance.now() - t0);
+        if (llmResult && llmResult.detections) {
+          pkg = normalizeLlmPackage(llmResult, threat);
+          pkg.generated_by = provider.id;
+          pkg.generated_by_label = provider.name;
+          pkg.generation_ms = dt;
+          pkg.temperature = state.settings.temperature;
+          log(`✓ ${provider.name} returned ${pkg.detections.length} detections, ${pkg.hunts.length} hunts in ${dt}ms.`, 'ok');
+        } else {
+          fallbackReason = `${provider.name}: returned unparseable or empty response`;
+          log(`⚠ ${provider.name} returned no usable package. Falling back to offline forge.`, 'err');
+        }
+      } catch (e) {
+        fallbackReason = `${provider.name}: ${e.message}`;
+        log(`✗ LLM call failed: ${e.message}. Falling back to offline forge.`, 'err');
+      }
+    }
+
+    // 3. Fallback or explicit offline path — use the template engine.
+    if (!pkg) {
+      const mitre = inferMitre(desc);
+      const spl   = forgeSpl(threat, mitre);
+      const label = forceOffline ? 'Offline Forge (forced)'
+                  : selectedIsOffline ? 'Offline Forge'
+                  : 'Offline Forge (fallback)';
+      pkg = {
+        name:    threat.name || deriveCodename(desc, threat.domain),
+        summary: deriveSummary(desc),
+        mitre:   state.settings.mitre ? mitre.map(m => ({id:m.id, name:m.name, tactic:m.tac})) : [],
+        data_sources: (spl.dataSources && spl.dataSources.length)
+                      ? spl.dataSources
+                      : inferDataSources(desc, threat.domain),
+        detections: spl.detections,
+        hunts:      spl.hunts,
+        triage:     buildTriage(threat, mitre),
+        response:   buildResponse(threat),
+        generated_by: 'offline',
+        generated_by_label: label,
+        fallback_reason: fallbackReason, // null unless we fell back
+        applied_families: spl.appliedFamilies,
+      };
+      log(`✓ ${label} produced ${pkg.detections.length} detections, ${pkg.hunts.length} hunts.`, 'ok');
+    }
+
+    // 4. validate SPL
+    pkg.detections.forEach(d => d.validation = validateSpl(d.spl));
+    pkg.hunts.forEach(h => h.validation = validateSpl(h.spl));
+
+    // 5. render
+    threat.package = pkg;
+    state.currentPackage = pkg;
+    state.activeThreatId = threat.id;
+
+    // auto-save draft
+    const existing = state.threats.findIndex(x => x.id === threat.id);
+    if (existing === -1) state.threats.unshift(threat); else state.threats[existing] = threat;
+    renderLibrary();
+    renderPackage(pkg);
+    save();
+    setStatus('Ready');
+    log(`✓ Package ready. Export or save when satisfied.`, 'ok');
+  } catch (err) {
+    log(`Forge error: ${err.message}`, 'err');
+    setStatus('Error');
+  } finally {
+    document.getElementById('btn-forge').disabled = false;
+  }
+}
+
+function normalizeLlmPackage(r, threat) {
+  return {
+    name:    r.name || threat.name || 'Untitled',
+    summary: r.summary || '',
+    mitre:   Array.isArray(r.mitre) ? r.mitre : [],
+    data_sources: Array.isArray(r.data_sources) ? r.data_sources : [],
+    detections: (r.detections || []).map(d => ({
+      title: d.title || 'Untitled detection',
+      risk:  d.risk  || 'medium',
+      cim_data_model: d.cim_data_model || null,
+      spl:   d.spl   || '',
+      why:   d.why   || '',
+    })),
+    hunts: (r.hunts || []).map(h => ({
+      title: h.title || 'Untitled hunt',
+      spl:   h.spl   || '',
+      why:   h.why   || '',
+    })),
+    triage:   r.triage   || '',
+    response: r.response || '',
+    generated_by: state.llm.selected,
+  };
+}
+
+function deriveCodename(desc, domain) {
+  const words = desc.split(/\s+/).slice(0, 4).join(' ').toUpperCase();
+  return `OP ${domain.toUpperCase()} — ${words.slice(0, 40)}`;
+}
+function deriveSummary(desc) {
+  return desc.split(/[.!?]/)[0].slice(0, 240) + (desc.length > 240 ? '...' : '');
+}
+function inferDataSources(desc, domain) {
+  const d = desc.toLowerCase();
+  const out = new Set();
+  if (/aws|cloudtrail|s3|ec2|iam/.test(d) || domain==='cloud') out.add('aws:cloudtrail');
+  if (/gcp|google cloud/.test(d)) out.add('gcp:audit');
+  if (/azure|entra/.test(d)) out.add('azure:audit');
+  if (/github/.test(d) || domain==='cicd') out.add('github:audit');
+  if (/okta/.test(d) || /\bidp\b/.test(d) || domain==='identity') out.add('okta:system');
+  if (/kubernetes|k8s/.test(d)) out.add('kube:audit');
+  if (/npm|pypi|package/.test(d) || domain==='supply-chain') out.add('ci:dependency-manifest');
+  if (out.size === 0) out.add('generic:authentication');
+  return Array.from(out);
+}
+
+// ------------------------------------------------------------
+// SPL VALIDATION (lightweight, heuristic)
+// ------------------------------------------------------------
+const SPL_COMMANDS = new Set([
+  'search','stats','tstats','eval','where','rex','regex','rename','table','fields',
+  'sort','dedup','head','tail','top','rare','timechart','chart','stats','eventstats',
+  'streamstats','bin','bucket','iplocation','geostats','spath','makemv','mvexpand',
+  'lookup','inputlookup','outputlookup','append','appendcols','join','transaction',
+  'fillnull','eventcount','tstats','metadata','makeresults','return','multisearch',
+  'foreach','map','loadjob','inputcsv','outputcsv','convert','untable','xyseries',
+  'format','addtotals','addinfo','accum','delta','trendline','anomalydetection',
+  'cluster','predict','x11','kmeans','classify','apply'
+]);
+
+function validateSpl(spl) {
+  if (!spl || !spl.trim()) return { ok: false, level:'err', msgs:['Empty SPL'] };
+  const msgs = [];
+  let level = 'ok';
+
+  // 1. balanced parens/brackets/quotes
+  const counts = { '(':0, ')':0, '[':0, ']':0 };
+  for (const c of spl) if (c in counts) counts[c]++;
+  if (counts['('] !== counts[')']) { msgs.push('Unbalanced parentheses'); level='err'; }
+  if (counts['['] !== counts[']']) { msgs.push('Unbalanced square brackets'); level='err'; }
+  const dq = (spl.match(/"/g) || []).length;
+  if (dq % 2 !== 0) { msgs.push('Unbalanced double quotes'); level='err'; }
+
+  // 2. pipe starts — if starts with |, the first token after should be a command
+  const trimmed = spl.trim();
+  const lines = trimmed.split('\n').map(s => s.trim()).filter(Boolean);
+  let pipeCount = 0;
+  lines.forEach(ln => { if (ln.startsWith('|')) pipeCount++; });
+
+  // 3. ensure at least one recognized command word exists
+  const tokens = trimmed.toLowerCase().match(/[a-z_]+/g) || [];
+  const hasCmd = tokens.some(t => SPL_COMMANDS.has(t));
+  if (!hasCmd) { msgs.push('No recognized SPL commands detected'); level='err'; }
+
+  // 4. common bad patterns
+  if (/\|\s*\|/.test(spl)) { msgs.push('Empty pipe segment detected'); level = level==='err'?'err':'warn'; }
+  if (/index\s*=\s*\*/.test(spl) && !/tstats/.test(spl)) {
+    msgs.push('index=* is expensive — scope to a specific index or use tstats'); level='warn';
+  }
+  if (!/(earliest|_time|tstats|timechart|firstTime|lastTime)/i.test(spl)) {
+    msgs.push('No obvious time scoping — add earliest= for performance'); level='warn';
+  }
+
+  // 5. CIM hint
+  if (/tstats/i.test(spl) && !/datamodel\s*=/i.test(spl)) {
+    msgs.push('tstats without datamodel=; add a CIM model for acceleration'); level='warn';
+  }
+
+  if (msgs.length === 0) msgs.push(`${pipeCount} pipeline stage(s), ${tokens.length} tokens — looks healthy.`);
+
+  return { ok: level==='ok', level, msgs };
+}
+
+// ------------------------------------------------------------
+// RENDERING THE PACKAGE
+// ------------------------------------------------------------
+function renderPackage(pkg) {
+  const out = document.getElementById('package');
+  const section = document.getElementById('output-section');
+  if (!pkg) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  const mitreHtml = (pkg.mitre || []).map(m =>
+    `<span class="tag mitre" title="${escapeHtml(m.tactic||'')}">${escapeHtml(m.id)} · ${escapeHtml(m.name)}</span>`
+  ).join('');
+  const sourcesHtml = (pkg.data_sources || []).map(s =>
+    `<span class="tag">${escapeHtml(s)}</span>`).join('');
+
+  // Loud model banner — impossible to miss in side-by-side comparisons.
+  const isOffline = pkg.generated_by === 'offline';
+  const isFallback = !!pkg.fallback_reason;
+  const bannerCls = isFallback ? 'fallback' : (isOffline ? 'offline' : '');
+  const label = pkg.generated_by_label || pkg.generated_by || 'unknown';
+  const provider = state.llm.providers.find(p => p.id === pkg.generated_by);
+  const modelId = provider && provider.model ? provider.model : '—';
+  const providerType = provider ? provider.provider : (isOffline ? 'template-engine' : 'unknown');
+  const tempDisplay = (typeof pkg.temperature === 'number') ? pkg.temperature.toFixed(2) : '—';
+  const durDisplay = pkg.generation_ms ? `${pkg.generation_ms}ms` : '—';
+
+  const bannerHtml = `
+    <div class="model-banner ${bannerCls}">
+      <div>
+        <div class="mb-tag">${isFallback ? '⚠ FALLBACK · Generated By' : 'Generated By'}</div>
+        <div class="mb-name">${escapeHtml(label)}</div>
+      </div>
+      <div class="mb-meta">
+        <div><strong>${escapeHtml(providerType.toUpperCase())}</strong> · ${escapeHtml(modelId)}</div>
+        <div>TEMP <strong>${tempDisplay}</strong> · TIME <strong>${durDisplay}</strong></div>
+        <div>FORGED <strong>${new Date().toISOString().slice(11,19)} UTC</strong></div>
+      </div>
+    </div>
+    ${isFallback ? `<div class="mb-warn">FALLBACK REASON — ${escapeHtml(pkg.fallback_reason)}</div>` : ''}
+  `;
+
+  out.innerHTML = bannerHtml + `
+    <div class="pkg-meta">
+      <div class="pkg-meta-row"><dt>Codename</dt><dd>${escapeHtml(pkg.name || '—')}</dd></div>
+      <div class="pkg-meta-row"><dt>Forged By</dt><dd>${escapeHtml(pkg.generated_by_label || pkg.generated_by || 'offline')}</dd></div>
+      <div class="pkg-meta-row" style="grid-column:1/3;"><dt>Summary</dt><dd>${escapeHtml(pkg.summary || '—')}</dd></div>
+      <div class="pkg-meta-row" style="grid-column:1/3;"><dt>Data Sources</dt><dd><div class="tags">${sourcesHtml || '<span style="color:var(--ink-faint);">none</span>'}</div></dd></div>
+      <div class="pkg-meta-row" style="grid-column:1/3;"><dt>MITRE ATT&CK</dt><dd><div class="tags">${mitreHtml || '<span style="color:var(--ink-faint);">none</span>'}</div></dd></div>
+    </div>
+
+    <div>
+      <div style="font-size:10px;letter-spacing:0.22em;color:var(--phosphor);text-transform:uppercase;margin:10px 0 8px;font-weight:700;">
+        ⦿ Detection Rules (${pkg.detections.length})
+      </div>
+      ${pkg.detections.map((d, i) => renderSplBlock(d, 'detection', i)).join('')}
+    </div>
+
+    <div>
+      <div style="font-size:10px;letter-spacing:0.22em;color:var(--amber);text-transform:uppercase;margin:14px 0 8px;font-weight:700;">
+        ⦿ Hunt Queries (${pkg.hunts.length})
+      </div>
+      ${pkg.hunts.length === 0
+        ? '<div class="prose" style="color:var(--ink-faint);">No hunt queries generated for this threat.</div>'
+        : pkg.hunts.map((h, i) => renderSplBlock(h, 'hunt', i)).join('')}
+    </div>
+
+    <div class="prose">
+      <h4>Triage Workflow</h4>
+${escapeHtml(pkg.triage || '—')}
+    </div>
+
+    <div class="prose">
+      <h4>Response Playbook</h4>
+${escapeHtml(pkg.response || '—')}
+    </div>
+  `;
+
+  // wire copy buttons
+  out.querySelectorAll('[data-copy-spl]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = out.querySelector(`pre[data-spl-id="${btn.dataset.copySpl}"]`).textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        const old = btn.textContent; btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = old, 1200);
+      });
+    });
+  });
+}
+
+function renderSplBlock(item, kind, i) {
+  const v = item.validation || { level: 'ok', msgs: [] };
+  const id = `${kind}-${i}`;
+  const riskTag = item.risk
+    ? `<span class="tag" style="background:${riskBg(item.risk)};border-color:${riskBc(item.risk)};color:${riskC(item.risk)};">${escapeHtml(item.risk.toUpperCase())}</span>`
+    : '';
+  const cimTag = item.cim_data_model
+    ? `<span class="tag">CIM · ${escapeHtml(item.cim_data_model)}</span>` : '';
+
+  return `
+    <div class="spl-block" style="margin-bottom:10px;">
+      <div class="spl-block-header">
+        <div>
+          <div class="spl-block-title">${escapeHtml(item.title || 'Untitled')}</div>
+          <div class="tags" style="margin-top:6px;">${riskTag}${cimTag}</div>
+        </div>
+        <div class="spl-block-actions">
+          <button class="icon-btn" data-copy-spl="${id}">Copy</button>
+        </div>
+      </div>
+      <pre class="spl-code" data-spl-id="${id}">${highlightSpl(item.spl)}</pre>
+      ${item.why ? `<div style="padding:10px 14px;border-top:1px solid var(--rule);font-size:11px;color:var(--ink-dim);"><strong style="color:var(--phosphor);">RATIONALE — </strong>${escapeHtml(item.why)}</div>` : ''}
+      <div class="validation ${v.level}">
+        <span>${v.level === 'ok' ? '✓' : v.level === 'warn' ? '⚠' : '✗'} Validation:</span>
+        <div><ul>${v.msgs.map(m=>`<li>${escapeHtml(m)}</li>`).join('')}</ul></div>
+      </div>
+    </div>
+  `;
+}
+
+function riskBg(r) { return ({low:'rgba(107,228,255,0.08)',medium:'rgba(255,179,71,0.08)',high:'rgba(255,179,71,0.14)',critical:'rgba(255,85,85,0.12)'})[r] || 'rgba(255,255,255,0.05)'; }
+function riskBc(r) { return ({low:'rgba(107,228,255,0.3)', medium:'rgba(255,179,71,0.3)', high:'rgba(255,179,71,0.5)',  critical:'rgba(255,85,85,0.5)'})[r] || 'var(--rule)'; }
+function riskC(r)  { return ({low:'var(--cyan)',          medium:'var(--amber)',         high:'var(--amber)',           critical:'var(--blood)'})[r] || 'var(--ink-dim)'; }
+
+// super-lightweight SPL syntax highlighting
+function highlightSpl(spl) {
+  let esc = escapeHtml(spl);
+  // strings
+  esc = esc.replace(/(&quot;[^&]*?&quot;)/g, '<span class="spl-str">$1</span>');
+  // comments `...`
+  esc = esc.replace(/(`[^`]+`)/g, '<span class="spl-comment">$1</span>');
+  // commands after pipe or at start of line
+  esc = esc.replace(/(^|\|\s*)([a-z_]+)/gim, (m, pre, cmd) => {
+    if (SPL_COMMANDS.has(cmd.toLowerCase())) {
+      return `${pre}<span class="spl-cmd">${cmd}</span>`;
+    }
+    return m;
+  });
+  // pipes
+  esc = esc.replace(/\|/g, '<span class="spl-pipe">|</span>');
+  return esc;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ------------------------------------------------------------
+// COMPARE MODELS — parallel fan-out of the same threat brief to
+// multiple providers, rendered side-by-side so output divergence
+// is obvious at a glance.
+// ------------------------------------------------------------
+
+// Render the checklist of providers in the inspector sidebar.
+function renderCompareTargets() {
+  const el = document.getElementById('compare-targets');
+  if (!el) return;
+  el.innerHTML = '';
+  state.llm.providers.forEach(p => {
+    const hasKey = p.provider === 'offline' || !p.needsKey || !!state.llm.keys[p.id];
+    const statusCls = hasKey ? 'ready' : 'needs-key';
+    const checked = state.compareTargets.includes(p.id);
+    const row = document.createElement('label');
+    row.className = 'compare-target' + (checked ? ' checked' : '');
+    row.innerHTML = `
+      <input type="checkbox" ${checked ? 'checked' : ''} data-id="${escapeHtml(p.id)}" />
+      <span class="ct-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+      <span class="ct-status ${statusCls}" title="${hasKey ? 'Ready' : 'API key required'}"></span>
+    `;
+    const cb = row.querySelector('input');
+    cb.addEventListener('change', () => {
+      const id = cb.dataset.id;
+      if (cb.checked) {
+        if (!state.compareTargets.includes(id)) state.compareTargets.push(id);
+        row.classList.add('checked');
+      } else {
+        state.compareTargets = state.compareTargets.filter(x => x !== id);
+        row.classList.remove('checked');
+      }
+      save();
+    });
+    el.appendChild(row);
+  });
+}
+
+// Live status tile for a single comparison run.
+function renderCompareStatusTiles() {
+  const grid = document.getElementById('compare-status-grid');
+  const section = document.getElementById('compare-progress');
+  if (!state.compareResults) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  grid.innerHTML = '';
+  state.compareResults.runs.forEach(run => {
+    const p = state.llm.providers.find(x => x.id === run.providerId);
+    const name = p ? p.name : run.providerId;
+    const cls  = run.status; // pending | running | done | error
+    const tile = document.createElement('div');
+    tile.className = `compare-tile ${cls}`;
+    let line;
+    if (run.status === 'pending')  line = 'Queued…';
+    else if (run.status === 'running') line = `<span class="spinner"></span>Running…`;
+    else if (run.status === 'done') {
+      const det = run.pkg?.detections?.length ?? 0;
+      const hnt = run.pkg?.hunts?.length ?? 0;
+      line = `✓ ${det} detections · ${hnt} hunts · ${run.durationMs}ms`;
+    } else if (run.status === 'error') {
+      line = `✗ ${run.error || 'failed'}`;
+    }
+    tile.innerHTML = `
+      <div class="ct-label">${escapeHtml((p && p.provider) || 'unknown')}</div>
+      <div class="ct-title">${escapeHtml(name)}</div>
+      <div class="ct-line">${line}</div>
+    `;
+    grid.appendChild(tile);
+  });
+  const total = state.compareResults.runs.length;
+  const done  = state.compareResults.runs.filter(r => r.status === 'done' || r.status === 'error').length;
+  document.getElementById('compare-progress-label').textContent =
+    done === total ? `COMPLETE · ${done}/${total}` : `RUNNING · ${done}/${total}`;
+}
+
+// Run a single provider within a comparison. Returns a package or throws.
+async function runComparisonFor(providerId, threat) {
+  const p = state.llm.providers.find(x => x.id === providerId);
+  if (!p) throw new Error('Unknown provider');
+
+  const t0 = performance.now();
+
+  // Offline provider uses the template engine directly.
+  if (p.provider === 'offline') {
+    const mitre = inferMitre(threat.description);
+    const spl   = forgeSpl(threat, mitre);
+    const pkg = {
+      name:    threat.name || deriveCodename(threat.description, threat.domain),
+      summary: deriveSummary(threat.description),
+      mitre:   state.settings.mitre ? mitre.map(m => ({id:m.id, name:m.name, tactic:m.tac})) : [],
+      data_sources: (spl.dataSources && spl.dataSources.length)
+                    ? spl.dataSources
+                    : inferDataSources(threat.description, threat.domain),
+      detections: spl.detections.map(d => ({ ...d, validation: validateSpl(d.spl) })),
+      hunts:      spl.hunts.map(h => ({ ...h, validation: validateSpl(h.spl) })),
+      triage:     buildTriage(threat, mitre),
+      response:   buildResponse(threat),
+      generated_by: p.id,
+      generated_by_label: p.name,
+      generation_ms: Math.round(performance.now() - t0),
+      applied_families: spl.appliedFamilies,
+    };
+    return pkg;
+  }
+
+  // LLM path: check credentials, call, normalize.
+  if (p.needsKey && !state.llm.keys[p.id]) {
+    throw new Error('No API key configured');
+  }
+
+  // Temporarily swap the "selected" provider so callLlm picks the right one.
+  // The LLM call functions read from state.llm.selected via the `p` argument;
+  // we already passed p directly, so this isn't strictly needed — but the
+  // helpers use state.settings.temperature which is global, which is what we want.
+  const key = state.llm.keys[p.id];
+  const user = buildUserPrompt(threat);
+  let raw;
+  if (p.provider === 'anthropic')           raw = await callAnthropic(p, key, user);
+  else if (p.provider === 'openai' ||
+           p.provider === 'openai-compatible') raw = await callOpenAI(p, key, user);
+  else if (p.provider === 'gemini')         raw = await callGemini(p, key, user);
+  else throw new Error(`Unsupported provider type: ${p.provider}`);
+
+  if (!raw || !raw.detections) throw new Error('LLM returned unparseable or empty response');
+
+  const pkg = normalizeLlmPackage(raw, threat);
+  pkg.detections = pkg.detections.map(d => ({ ...d, validation: validateSpl(d.spl) }));
+  pkg.hunts      = pkg.hunts.map(h => ({ ...h, validation: validateSpl(h.spl) }));
+  pkg.generated_by = p.id;
+  pkg.generated_by_label = p.name;
+  pkg.generation_ms = Math.round(performance.now() - t0);
+  pkg.temperature = state.settings.temperature;
+  return pkg;
+}
+
+// Orchestrator: fan the brief out to every checked target in parallel.
+async function runCompareModels() {
+  const desc = document.getElementById('threat-desc').value.trim();
+  if (!desc) { log('Enter a threat description first.', 'err'); return; }
+
+  if (state.compareTargets.length < 2) {
+    log('Select at least 2 providers in the Compare Targets panel.', 'err');
+    return;
+  }
+
+  const name   = document.getElementById('threat-name').value.trim();
+  const domain = document.getElementById('threat-domain').value;
+
+  clearLog();
+  setStatus('Comparing');
+  document.getElementById('btn-compare').disabled = true;
+  document.getElementById('btn-forge').disabled = true;
+  document.getElementById('output-section').style.display = 'none';
+  document.getElementById('comparison-view').style.display = 'none';
+
+  const threat = {
+    id: `cmp_${Date.now().toString(36)}`,
+    name, description: desc, domain,
+    urls: state.urls.slice(),
+    createdAt: new Date().toISOString(),
+  };
+
+  // Optionally ingest URLs once, shared across all runs.
+  if (state.settings.fetch && state.urls.length > 0 &&
+      Object.keys(state.urlContexts).length < state.urls.length) {
+    log('Ingesting reference URLs (shared across all runs)...');
+    await ingestUrls();
+  }
+
+  // Initialize all runs in "pending" state.
+  state.compareResults = {
+    threat,
+    temperature: state.settings.temperature,
+    startedAt: new Date().toISOString(),
+    runs: state.compareTargets.map(id => ({
+      providerId: id, status: 'pending', pkg: null, error: null, durationMs: 0,
+    })),
+  };
+  renderCompareStatusTiles();
+
+  log(`▶ Fanning out to ${state.compareResults.runs.length} providers (temp=${state.settings.temperature})...`);
+
+  // Fire all calls in parallel. Each run updates its own tile as it finishes.
+  await Promise.all(state.compareResults.runs.map(async (run) => {
+    run.status = 'running';
+    renderCompareStatusTiles();
+    const t0 = performance.now();
+    const p = state.llm.providers.find(x => x.id === run.providerId);
+    try {
+      const pkg = await runComparisonFor(run.providerId, threat);
+      run.pkg = pkg;
+      run.status = 'done';
+      run.durationMs = Math.round(performance.now() - t0);
+      log(`✓ ${p.name} → ${pkg.detections.length} detections, ${pkg.hunts.length} hunts (${run.durationMs}ms)`, 'ok');
+    } catch (err) {
+      run.status = 'error';
+      run.error = err.message;
+      run.durationMs = Math.round(performance.now() - t0);
+      log(`✗ ${p.name} → ${err.message}`, 'err');
+    }
+    renderCompareStatusTiles();
+  }));
+
+  // Render the side-by-side view.
+  renderComparisonView();
+  setStatus('Comparison ready');
+  document.getElementById('btn-compare').disabled = false;
+  document.getElementById('btn-forge').disabled = false;
+}
+
+// Build the side-by-side columnar comparison view.
+function renderComparisonView() {
+  const view = document.getElementById('comparison-view');
+  const cols = document.getElementById('compare-columns');
+  if (!state.compareResults) { view.style.display = 'none'; return; }
+  view.style.display = 'block';
+
+  const runs = state.compareResults.runs;
+  cols.style.setProperty('--cols', Math.max(runs.length, 1));
+  cols.innerHTML = '';
+
+  runs.forEach(run => {
+    const p = state.llm.providers.find(x => x.id === run.providerId);
+    const col = document.createElement('div');
+    col.className = 'compare-col';
+
+    const headerCls = run.status === 'error' ? ' error' : '';
+    let statsHtml;
+    if (run.status === 'done') {
+      statsHtml = `
+        <span>D·<strong>${run.pkg.detections.length}</strong></span>
+        <span>H·<strong>${run.pkg.hunts.length}</strong></span>
+        <span>⏱·<strong>${run.durationMs}ms</strong></span>
+      `;
+    } else if (run.status === 'error') {
+      statsHtml = `<span style="color:var(--blood);">FAILED</span>`;
+    } else {
+      statsHtml = `<span><span class="spinner"></span>…</span>`;
+    }
+
+    const modelLine = p?.model ? `${p.provider} · ${p.model}` : (p?.provider || 'unknown');
+    col.innerHTML = `
+      <div class="compare-col-header${headerCls}">
+        <div class="cch-model">${escapeHtml(p ? p.name : run.providerId)}</div>
+        <div class="cch-provider">${escapeHtml(modelLine)}</div>
+        <div class="cch-stats">${statsHtml}</div>
+      </div>
+      <div class="compare-col-body" id="col-body-${run.providerId}"></div>
+    `;
+    cols.appendChild(col);
+
+    const body = col.querySelector('.compare-col-body');
+
+    if (run.status === 'error') {
+      body.innerHTML = `
+        <div class="cc-error">
+          <strong>ERROR</strong>
+          ${escapeHtml(run.error || 'Unknown error')}
+        </div>
+      `;
+      return;
+    }
+
+    if (run.status !== 'done') {
+      body.innerHTML = `<div class="cc-error" style="color:var(--ink-dim);">Running…</div>`;
+      return;
+    }
+
+    const pkg = run.pkg;
+
+    // Summary block
+    let html = `
+      <div class="cc-subhead">Summary</div>
+      <div class="cc-prose-mini">${escapeHtml(pkg.summary || '—')}</div>
+    `;
+
+    // MITRE
+    if (pkg.mitre && pkg.mitre.length) {
+      html += `<div class="cc-subhead violet">MITRE ATT&amp;CK</div>`;
+      html += `<div class="mitre-chip-row">`;
+      pkg.mitre.forEach(m => {
+        html += `<span class="tag mitre" title="${escapeHtml(m.tactic||'')}">${escapeHtml(m.id)}</span>`;
+      });
+      html += `</div>`;
+    }
+
+    // Data sources
+    if (pkg.data_sources && pkg.data_sources.length) {
+      html += `<div class="cc-subhead amber">Data Sources</div>`;
+      html += `<div class="mitre-chip-row">`;
+      pkg.data_sources.forEach(s => {
+        html += `<span class="tag">${escapeHtml(s)}</span>`;
+      });
+      html += `</div>`;
+    }
+
+    // Detections
+    html += `<div class="cc-subhead">Detections (${pkg.detections.length})</div>`;
+    pkg.detections.forEach(d => {
+      const riskColor = riskC(d.risk || 'medium');
+      html += `
+        <div class="cc-item">
+          <div class="cc-item-title">
+            <span>${escapeHtml(d.title || 'Untitled')}</span>
+            <span class="risk-dot" style="background:${riskColor};" title="${escapeHtml((d.risk||'').toUpperCase())}"></span>
+          </div>
+          <pre class="cc-spl">${highlightSpl(d.spl || '')}</pre>
+          ${d.why ? `<div class="cc-why">${escapeHtml(d.why)}</div>` : ''}
+        </div>
+      `;
+    });
+
+    // Hunts
+    if (pkg.hunts && pkg.hunts.length) {
+      html += `<div class="cc-subhead amber">Hunts (${pkg.hunts.length})</div>`;
+      pkg.hunts.forEach(h => {
+        html += `
+          <div class="cc-item">
+            <div class="cc-item-title"><span>${escapeHtml(h.title || 'Untitled')}</span></div>
+            <pre class="cc-spl">${highlightSpl(h.spl || '')}</pre>
+            ${h.why ? `<div class="cc-why">${escapeHtml(h.why)}</div>` : ''}
+          </div>
+        `;
+      });
+    }
+
+    // Triage & Response (collapsed)
+    if (pkg.triage) {
+      html += `<div class="cc-subhead">Triage</div>`;
+      html += `<div class="cc-prose-mini">${escapeHtml(pkg.triage)}</div>`;
+    }
+    if (pkg.response) {
+      html += `<div class="cc-subhead">Response</div>`;
+      html += `<div class="cc-prose-mini">${escapeHtml(pkg.response)}</div>`;
+    }
+
+    body.innerHTML = html;
+  });
+}
+
+// Export helpers for the comparison.
+function exportComparisonJson() {
+  if (!state.compareResults) return;
+  const payload = {
+    threat: state.compareResults.threat,
+    temperature: state.compareResults.temperature,
+    startedAt: state.compareResults.startedAt,
+    runs: state.compareResults.runs.map(r => ({
+      providerId: r.providerId,
+      providerName: state.llm.providers.find(x => x.id === r.providerId)?.name || r.providerId,
+      status: r.status,
+      durationMs: r.durationMs,
+      error: r.error,
+      package: r.pkg,
+    })),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const n = (state.compareResults.threat.name || 'comparison').replace(/[^a-z0-9-_]/gi, '_');
+  downloadBlob(blob, `${n}_comparison.json`);
+}
+
+function exportComparisonMarkdown() {
+  if (!state.compareResults) return;
+  const t = state.compareResults.threat;
+  const md = [];
+  md.push(`# Model Comparison — ${t.name || 'Threat'}`);
+  md.push(`*Generated by All Seeing Eye — ${state.compareResults.startedAt}*`);
+  md.push('');
+  md.push(`**Temperature:** ${state.compareResults.temperature}`);
+  md.push(`**Domain:** ${t.domain}`);
+  md.push('');
+  md.push(`## Threat Brief`);
+  md.push('');
+  md.push(t.description);
+  md.push('');
+
+  state.compareResults.runs.forEach(r => {
+    const p = state.llm.providers.find(x => x.id === r.providerId);
+    md.push(`---`);
+    md.push('');
+    md.push(`## ${p ? p.name : r.providerId}`);
+    md.push(`- **Provider:** ${p?.provider || 'unknown'}`);
+    md.push(`- **Model:** ${p?.model || '—'}`);
+    md.push(`- **Status:** ${r.status}`);
+    md.push(`- **Duration:** ${r.durationMs}ms`);
+    if (r.error) md.push(`- **Error:** ${r.error}`);
+    md.push('');
+    if (r.status !== 'done' || !r.pkg) { md.push(''); return; }
+
+    md.push(`**Summary:** ${r.pkg.summary || '—'}`);
+    md.push('');
+    md.push(`**MITRE:** ${(r.pkg.mitre||[]).map(m=>`${m.id} (${m.name})`).join(', ') || '—'}`);
+    md.push(`**Data sources:** ${(r.pkg.data_sources||[]).join(', ') || '—'}`);
+    md.push('');
+
+    md.push(`### Detections (${r.pkg.detections.length})`);
+    r.pkg.detections.forEach((d, i) => {
+      md.push(`#### ${i+1}. ${d.title} [${d.risk||'—'}]`);
+      md.push('```spl');
+      md.push(d.spl);
+      md.push('```');
+      if (d.why) md.push(`_${d.why}_`);
+      md.push('');
+    });
+
+    md.push(`### Hunts (${r.pkg.hunts.length})`);
+    r.pkg.hunts.forEach((h, i) => {
+      md.push(`#### ${i+1}. ${h.title}`);
+      md.push('```spl');
+      md.push(h.spl);
+      md.push('```');
+      if (h.why) md.push(`_${h.why}_`);
+      md.push('');
+    });
+  });
+
+  const blob = new Blob([md.join('\n')], { type: 'text/markdown' });
+  const n = (t.name || 'comparison').replace(/[^a-z0-9-_]/gi, '_');
+  downloadBlob(blob, `${n}_comparison.md`);
+}
+
+// ------------------------------------------------------------
+// EXPORT
+// ------------------------------------------------------------
+function exportJson() {
+  if (!state.currentPackage) return;
+  const blob = new Blob([JSON.stringify(state.currentPackage, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, `${(state.currentPackage.name||'threat').replace(/[^a-z0-9-_]/gi,'_')}.json`);
+}
+
+function exportMarkdown() {
+  if (!state.currentPackage) return;
+  const p = state.currentPackage;
+  const md = [];
+  md.push(`# ${p.name}`);
+  md.push(`*Generated by All Seeing Eye — ${new Date().toISOString()}*`);
+  md.push('');
+  md.push(`**Summary:** ${p.summary}`);
+  md.push('');
+  md.push(`**Forged by:** ${p.generated_by}`);
+  md.push(`**Data sources:** ${(p.data_sources||[]).join(', ')}`);
+  md.push(`**MITRE ATT&CK:** ${(p.mitre||[]).map(m=>`${m.id} (${m.name} — ${m.tactic})`).join('; ')}`);
+  md.push('');
+  md.push('## Detections');
+  (p.detections||[]).forEach((d,i) => {
+    md.push(`### ${i+1}. ${d.title}`);
+    md.push(`- **Risk:** ${d.risk||'—'}`);
+    if (d.cim_data_model) md.push(`- **CIM:** ${d.cim_data_model}`);
+    md.push('');
+    md.push('```spl');
+    md.push(d.spl);
+    md.push('```');
+    if (d.why) md.push(`**Why this fires:** ${d.why}`);
+    md.push('');
+  });
+  md.push('## Hunts');
+  (p.hunts||[]).forEach((h,i) => {
+    md.push(`### ${i+1}. ${h.title}`);
+    md.push('');
+    md.push('```spl');
+    md.push(h.spl);
+    md.push('```');
+    if (h.why) md.push(`**Why:** ${h.why}`);
+    md.push('');
+  });
+  md.push('## Triage');
+  md.push('```');
+  md.push(p.triage || '');
+  md.push('```');
+  md.push('## Response Playbook');
+  md.push('```');
+  md.push(p.response || '');
+  md.push('```');
+
+  const blob = new Blob([md.join('\n')], { type: 'text/markdown' });
+  downloadBlob(blob, `${(p.name||'threat').replace(/[^a-z0-9-_]/gi,'_')}.md`);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+}
+
+// ------------------------------------------------------------
+// PRESETS
+// ------------------------------------------------------------
+const PRESETS = {
+  'okta-session-hijack': {
+    name: 'Okta Session Token Theft',
+    domain: 'identity',
+    description: `A threat actor phishes an Okta user with an Evilginx-style reverse proxy to capture the session token rather than the password. The adversary replays the session cookie from their own infrastructure (typically a VPS in a different country) to access downstream SaaS apps before MFA challenge. Look for: Okta session use from impossible-travel source IPs, UA mismatch on the same session ID, and MFA factor enrollment changes shortly after.`,
+  },
+  'github-actions-secret-exfil': {
+    name: 'GitHub Actions Secret Exfil',
+    domain: 'cicd',
+    description: `Adversary has compromised a developer's GitHub Personal Access Token via a malicious VS Code extension. They use it to modify a GitHub Actions workflow in a protected branch (or via a pull_request_target trigger) to echo repository secrets to an attacker-controlled webhook. They may also add themselves as a collaborator, register a self-hosted runner, or introduce a dependency typosquat. The exfil typically shows up as outbound HTTPS from github.com runner IPs to low-reputation domains.`,
+  },
+  'aws-iam-backdoor': {
+    name: 'AWS IAM Persistence Backdoor',
+    domain: 'cloud',
+    description: `A threat actor has obtained a long-lived AWS access key belonging to a CI/CD service account (harvested from a leaked .env file in a public S3 bucket). They use it to create a new IAM user with a non-obvious name (e.g., 'aws-backup-svc'), attach AdministratorAccess, and generate a new access key for the backdoor user. They then establish persistence via a Lambda function that rotates its own IAM credentials on a CloudWatch Events schedule. All activity originates from residential/VPS IPs outside the corporate egress range.`,
+  },
+  'malicious-npm-dependency': {
+    name: 'Malicious NPM Dependency',
+    domain: 'supply-chain',
+    description: `An adversary publishes a typosquatted npm package (e.g., 'reacct' instead of 'react') with a postinstall script that harvests environment variables (AWS_*, GITHUB_TOKEN, NPM_TOKEN, SSH keys from ~/.ssh) and POSTs them to an attacker-controlled endpoint. The package gets pulled into a CI pipeline via a mis-typed dependency in package.json, executing during 'npm install' on the build runner. Detection should focus on outbound network from CI runners to low-reputation destinations during dependency installation.`,
+  },
+  'entra-illicit-consent': {
+    name: 'Entra ID — Illicit OAuth Consent',
+    domain: 'identity',
+    description: `A spear-phishing campaign tricks an M365 user into granting OAuth consent to an attacker-registered multi-tenant application requesting Mail.ReadWrite, Files.Read.All, and User.Read.All scopes. Once consented, the adversary harvests the user's Outlook mailbox and OneDrive via Graph API from their own infrastructure. The app registration is in an attacker-controlled tenant. Persistence survives password resets and MFA re-enrollment because the refresh token is app-scoped. Look for new enterprise app consents with high-privilege Graph scopes, followed by Graph API activity from unexpected IPs.`,
+  },
+  'k8s-container-escape': {
+    name: 'Kubernetes — Container Escape via Privileged Pod',
+    domain: 'other',
+    description: `An adversary with kubectl access (via stolen kubeconfig from a developer laptop) deploys a privileged pod with hostPath mount of / into a workload namespace. They use this to read the node's containerd socket, move laterally to other pods, and exfiltrate service-account tokens. Falco rules for "Terminal shell in container" and "Write below etc" are likely to fire. Also watch Kubernetes audit for pods with securityContext.privileged=true outside kube-system.`,
+  },
+  'gitlab-runner-hijack': {
+    name: 'GitLab — Rogue Runner Registered',
+    domain: 'cicd',
+    description: `A compromised GitLab maintainer token is used to register a self-hosted runner to a critical project. The attacker's runner picks up jobs from .gitlab-ci.yml and reads masked CI variables (cloud provider credentials, deploy keys) during job execution. Because the runner is tagged matching legitimate runners, jobs route to it without anomaly. Detection must cover: unexpected runner registration events, first-time src IPs for CI_JOB_TOKEN auth, and masked variable reads during unusual job contexts.`,
+  },
+  'saml-golden': {
+    name: 'Golden SAML — Token Forgery',
+    domain: 'identity',
+    description: `A threat actor with domain-admin on the on-prem ADFS server extracts the SAML token-signing certificate's private key. They use this to forge SAML assertions for arbitrary users to any SaaS app federated through ADFS, bypassing MFA and all IDP controls. The adversary authenticates from their own infrastructure with forged assertions. Detection is hard because the SaaS-side sees valid signed assertions; look for SAML sign-ins with unusual IssueInstant values, sessions that never touched the IDP, and changes to the SAML signing certificate.`,
+  },
+  'tfc-prod-destroy': {
+    name: 'Terraform Cloud — Malicious Destroy Run',
+    domain: 'cloud',
+    description: `A threat actor phishes a Terraform Cloud user and obtains their API token. They use it to queue a destroy run against a production workspace over the weekend (to minimize detection), taking down a revenue-generating application. Detection priorities: TFC API token first-use from a new IP, destructive runs outside business hours, and unauthorized workspace variable reads that precede the destroy run.`,
+  },
+  'leaked-env-file': {
+    name: 'Leaked .env File in Public Repo',
+    domain: 'supply-chain',
+    description: `TruffleHog scanning of public GitHub detects a verified AWS access key committed to a public repository. The key belongs to a production service account. Commit was pushed to the main branch 14 days ago. Historical gitleaks data shows the same access key was detected in a different repo 45 days ago but never rotated. Detection focus: verified secret findings on default branches, and long-lived exposed secrets that persist across scans indicating no rotation happened.`,
+  },
+};
+function loadPreset(id) {
+  const p = PRESETS[id];
+  if (!p) return;
+  document.getElementById('threat-name').value = p.name;
+  document.getElementById('threat-desc').value = p.description;
+  document.getElementById('threat-domain').value = p.domain;
+  state.urls = [];
+  state.urlContexts = {};
+  renderUrls();
+  state.currentPackage = null;
+  document.getElementById('output-section').style.display = 'none';
+  document.getElementById('threat-desc').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+// ------------------------------------------------------------
+// UI WIRING
+// ------------------------------------------------------------
+function wire() {
+  // URL input
+  document.getElementById('ref-url').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.value.trim()) {
+      e.preventDefault();
+      addUrl(e.target.value);
+      e.target.value = '';
+    }
+  });
+  document.getElementById('btn-fetch-urls').addEventListener('click', ingestUrls);
+
+  // Forge
+  document.getElementById('btn-forge').addEventListener('click', forge);
+
+  // Compare Models
+  document.getElementById('btn-compare').addEventListener('click', runCompareModels);
+  document.getElementById('btn-close-comparison').addEventListener('click', () => {
+    document.getElementById('comparison-view').style.display = 'none';
+    document.getElementById('compare-progress').style.display = 'none';
+    state.compareResults = null;
+  });
+  document.getElementById('btn-export-compare-json').addEventListener('click', exportComparisonJson);
+  document.getElementById('btn-export-compare-md').addEventListener('click', exportComparisonMarkdown);
+
+  // Clear
+  document.getElementById('btn-clear-input').addEventListener('click', () => {
+    document.getElementById('threat-name').value = '';
+    document.getElementById('threat-desc').value = '';
+    state.urls = []; state.urlContexts = {};
+    renderUrls();
+    clearLog();
+    document.getElementById('output-section').style.display = 'none';
+    document.getElementById('comparison-view').style.display = 'none';
+    document.getElementById('compare-progress').style.display = 'none';
+    state.currentPackage = null;
+    state.activeThreatId = null;
+    state.compareResults = null;
+    renderLibrary();
+    save();
+  });
+
+  // New hunt
+  document.getElementById('btn-new-hunt').addEventListener('click', () => {
+    document.getElementById('btn-clear-input').click();
+    document.getElementById('threat-name').focus();
+  });
+
+  // Export
+  document.getElementById('btn-export-json').addEventListener('click', exportJson);
+  document.getElementById('btn-export-md').addEventListener('click', exportMarkdown);
+  document.getElementById('btn-save-hunt').addEventListener('click', () => {
+    if (!state.currentPackage) return;
+    // current package is auto-saved under active threat id
+    log(`✓ Saved to threat library as "${state.currentPackage.name}"`, 'ok');
+  });
+
+  // Presets
+  document.querySelectorAll('[data-preset]').forEach(el => {
+    el.addEventListener('click', () => loadPreset(el.dataset.preset));
+  });
+
+  // LLM manage
+  document.getElementById('btn-manage-llm').addEventListener('click', () => {
+    openModal('modal-llm');
+  });
+  document.querySelectorAll('[data-close-modal]').forEach(b => {
+    b.addEventListener('click', () => closeModal(b.dataset.closeModal));
+  });
+  document.getElementById('btn-save-llm').addEventListener('click', () => {
+    const name = document.getElementById('llm-name-input').value.trim();
+    const type = document.getElementById('llm-type-input').value;
+    const endpoint = document.getElementById('llm-endpoint-input').value.trim();
+    const model = document.getElementById('llm-model-input').value.trim();
+    const key = document.getElementById('llm-key-input').value;
+    if (!name || !endpoint || !model) { alert('Name, endpoint, and model are required.'); return; }
+    const id = 'custom_' + Date.now().toString(36);
+    state.llm.providers.push({
+      id, name, provider: type, endpoint, model,
+      needsKey: type !== 'openai-compatible' || !!key,
+    });
+    if (key) state.llm.keys[id] = key;
+    state.llm.selected = id;
+    renderLlmList(); renderKeyFields(); renderCompareTargets(); save();
+    closeModal('modal-llm');
+    ['llm-name-input','llm-endpoint-input','llm-model-input','llm-key-input'].forEach(x => document.getElementById(x).value = '');
+  });
+
+  // Clock
+  const tick = () => {
+    const t = new Date().toISOString().replace('T',' ').slice(0,19);
+    document.getElementById('hdr-clock').textContent = t + ' UTC';
+  };
+  tick(); setInterval(tick, 1000);
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ------------------------------------------------------------
+// BOOT
+// ------------------------------------------------------------
+load();
+renderLlmList();
+renderKeyFields();
+renderUrls();
+renderLibrary();
+renderToggles();
+renderCompareTargets();
+wire();
+updateStorageStat();
+// Detect Electron shell
+if (navigator.userAgent.includes('Electron')) {
+  document.getElementById('stat-mode').textContent = 'DESKTOP';
+}
+</script>
+
+</body>
+</html>
