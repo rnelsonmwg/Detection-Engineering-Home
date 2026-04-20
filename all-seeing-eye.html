@@ -1533,11 +1533,20 @@ input[type="range"].slider::-moz-range-thumb {
       </div>
       <div class="field" style="margin-top:12px;">
         <label>Model ID</label>
-        <input type="text" id="llm-model-input" placeholder="llama3.1:8b, gpt-4o, claude-opus-4-5, gemini-1.5-pro ..." />
+        <input type="text" id="llm-model-input" placeholder="llama3.1:8b, gpt-4o, claude-opus-4-7, gemini-2.5-pro ..." />
       </div>
       <div class="field" style="margin-top:12px;">
         <label>API Key (optional for local)</label>
         <input type="password" id="llm-key-input" placeholder="sk-..." />
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0.04em;font-size:11px;">
+          <input type="checkbox" id="llm-no-temperature-input" style="width:13px;height:13px;margin:0;accent-color:var(--amber);" />
+          <span>Model rejects <code style="color:var(--amber);">temperature</code> (e.g. Claude Opus 4.7)</span>
+        </label>
+        <div style="font-size:10px;color:var(--ink-faint);margin-top:4px;line-height:1.5;padding-left:22px;">
+          Check this for any Anthropic model Opus 4.7 or newer, or any other model that returns 400 on sampling parameters. The forge will use Anthropic's <code>effort</code> parameter instead where supported.
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1564,12 +1573,18 @@ const state = {
   currentPackage: null,   // last generated package
   llm: {
     providers: [
-      { id: 'claude-opus',   name: 'Claude Opus 4.7',     provider: 'anthropic',       endpoint: 'https://api.anthropic.com/v1/messages',  model: 'claude-opus-4-7',          needsKey: true },
-      { id: 'claude-sonnet', name: 'Claude Sonnet 4.6',   provider: 'anthropic',       endpoint: 'https://api.anthropic.com/v1/messages',  model: 'claude-sonnet-4-6',        needsKey: true },
-      { id: 'gpt-4o',        name: 'ChatGPT · GPT-4o',    provider: 'openai',          endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o',              needsKey: true },
-      { id: 'gpt-4o-mini',   name: 'ChatGPT · GPT-4o-mini', provider: 'openai',        endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini',         needsKey: true },
-      { id: 'gemini-1.5-pro',name: 'Gemini 1.5 Pro',      provider: 'gemini',          endpoint: 'https://generativelanguage.googleapis.com/v1beta/models', model: 'gemini-1.5-pro', needsKey: true },
-      { id: 'offline',       name: 'Offline Forge (no LLM)', provider: 'offline',      endpoint: null,                                     model: null,                       needsKey: false },
+      // Capability flags control which API parameters the forge sends:
+      //   supportsTemperature: false means temperature/top_p/top_k are
+      //     omitted from the request (Opus 4.7 rejects them with 400).
+      //   supportsEffort: true means the model accepts Anthropic's new
+      //     `output_config.effort` parameter instead of temperature.
+      { id: 'claude-opus',   name: 'Claude Opus 4.7',     provider: 'anthropic', endpoint: 'https://api.anthropic.com/v1/messages',  model: 'claude-opus-4-7',    needsKey: true, supportsTemperature: false, supportsEffort: true },
+      { id: 'claude-sonnet', name: 'Claude Sonnet 4.6',   provider: 'anthropic', endpoint: 'https://api.anthropic.com/v1/messages',  model: 'claude-sonnet-4-6',  needsKey: true, supportsTemperature: true,  supportsEffort: true },
+      { id: 'gpt-4o',        name: 'ChatGPT · GPT-4o',    provider: 'openai',    endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o',         needsKey: true, supportsTemperature: true },
+      { id: 'gpt-4o-mini',   name: 'ChatGPT · GPT-4o-mini', provider: 'openai',  endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini',    needsKey: true, supportsTemperature: true },
+      { id: 'gemini-2.5-pro',   name: 'Gemini 2.5 Pro',   provider: 'gemini',    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models', model: 'gemini-2.5-pro',   needsKey: true, supportsTemperature: true },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'gemini',    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models', model: 'gemini-2.5-flash', needsKey: true, supportsTemperature: true },
+      { id: 'offline',       name: 'Offline Forge (no LLM)', provider: 'offline', endpoint: null,                                     model: null,                 needsKey: false },
     ],
     selected: 'claude-opus',
     keys: {},
@@ -1615,12 +1630,62 @@ function load() {
     state.threats        = snap.threats        || [];
     state.activeThreatId = snap.activeThreatId || null;
     if (snap.llm) {
-      if (snap.llm.providers) state.llm.providers = snap.llm.providers;
+      if (snap.llm.providers) {
+        // Migrate v1/v2 → v3: Gemini 1.5 family was shut down by Google
+        // (returns 404). Replace any persisted gemini-1.5-* entry with
+        // the current stable 2.5-pro, and keep any API key the user had.
+        const migrated = [];
+        const seen = new Set();
+        snap.llm.providers.forEach(p => {
+          if (p.id === 'gemini-1.5-pro' || /^gemini-1\.5-/.test(p.model || '')) {
+            // Carry forward their API key under the new id if present
+            if (snap.llm.keys && snap.llm.keys[p.id]) {
+              snap.llm.keys['gemini-2.5-pro'] = snap.llm.keys[p.id];
+              delete snap.llm.keys[p.id];
+            }
+            if (!seen.has('gemini-2.5-pro')) {
+              migrated.push({
+                id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro',
+                provider: 'gemini',
+                endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
+                model: 'gemini-2.5-pro', needsKey: true,
+                supportsTemperature: true,
+              });
+              migrated.push({
+                id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash',
+                provider: 'gemini',
+                endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
+                model: 'gemini-2.5-flash', needsKey: true,
+                supportsTemperature: true,
+              });
+              seen.add('gemini-2.5-pro');
+              seen.add('gemini-2.5-flash');
+            }
+          } else if (!seen.has(p.id)) {
+            // Migrate v3 → v3.1: backfill capability flags for Anthropic
+            // models. Opus 4.7 rejects temperature with a 400; mark it so
+            // the forge omits the parameter.
+            const upgraded = { ...p };
+            if (p.provider === 'anthropic') {
+              if (!('supportsTemperature' in upgraded) && /opus-4-7/.test(p.model || '')) {
+                upgraded.supportsTemperature = false;
+                upgraded.supportsEffort = true;
+              } else if (!('supportsTemperature' in upgraded)) {
+                upgraded.supportsTemperature = true;
+              }
+            } else if (p.provider === 'openai' || p.provider === 'openai-compatible' || p.provider === 'gemini') {
+              if (!('supportsTemperature' in upgraded)) upgraded.supportsTemperature = true;
+            }
+            migrated.push(upgraded);
+            seen.add(upgraded.id);
+          }
+        });
+        state.llm.providers = migrated;
+      }
       state.llm.keys     = snap.llm.keys     || {};
-      // Keep the user's saved selection — including 'offline' if they chose it
-      // explicitly in v2. The migration of legacy `offline: true` setting is
-      // handled separately below.
+      // Keep the user's saved selection — but remap deprecated IDs.
       state.llm.selected = snap.llm.selected || state.llm.selected;
+      if (state.llm.selected === 'gemini-1.5-pro') state.llm.selected = 'gemini-2.5-pro';
       // Safety: if the saved provider was removed, fall back to first available.
       if (!state.llm.providers.find(p => p.id === state.llm.selected)) {
         state.llm.selected = state.llm.providers[0].id;
@@ -3081,7 +3146,41 @@ async function callLlm(threat) {
   return null;
 }
 
+// Translate the user's 0.0–1.5 temperature slider into Anthropic's
+// effort levels for models that don't accept temperature (Opus 4.7+).
+// The mapping keeps the slider meaningful even on newer Claude models:
+// lower values = faster/terser, higher values = more thorough reasoning.
+function temperatureToEffort(t) {
+  if (t <= 0.3) return 'low';
+  if (t <= 0.7) return 'medium';
+  if (t <= 1.1) return 'high';      // Anthropic default
+  return 'xhigh';
+}
+
 async function callAnthropic(p, key, user) {
+  // Build the request body conditionally based on the model's capabilities.
+  // Opus 4.7 rejects temperature/top_p/top_k outright (400 error); it uses
+  // an `output_config.effort` parameter instead.
+  const body = {
+    model: p.model,
+    max_tokens: 4096,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: user }],
+  };
+
+  // Default to "supports temperature" for unknown/custom models (most do).
+  const supportsTemp   = p.supportsTemperature !== false;
+  const supportsEffort = p.supportsEffort === true;
+
+  if (supportsTemp) {
+    body.temperature = state.settings.temperature;
+  } else if (supportsEffort) {
+    // Translate the slider into an effort level so the UI control
+    // still drives model behavior on Opus 4.7+.
+    body.output_config = { effort: temperatureToEffort(state.settings.temperature) };
+  }
+  // If neither, send no variance parameter — model uses its default.
+
   const resp = await fetch(p.endpoint, {
     method: 'POST',
     headers: {
@@ -3090,16 +3189,39 @@ async function callAnthropic(p, key, user) {
       'anthropic-dangerous-direct-browser-access': 'true',
       'content-type': 'application/json',
     },
-    body: JSON.stringify({
-      model: p.model,
-      max_tokens: 4096,
-      temperature: state.settings.temperature,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: user }],
-    }),
+    body: JSON.stringify(body),
   });
+
   if (!resp.ok) {
     const txt = await resp.text();
+    // Self-diagnosing error for parameter deprecations. If the model tells
+    // us a param is deprecated, flag the provider config so the next call
+    // automatically skips it — self-healing against future model changes.
+    if (resp.status === 400 && /temperature.*(deprecated|not supported|not allowed)/i.test(txt)) {
+      p.supportsTemperature = false;
+      if (!('supportsEffort' in p)) p.supportsEffort = true;
+      try { save(); } catch (e) {}
+      throw new Error(
+        `Anthropic 400: "${p.name}" no longer accepts temperature. ` +
+        `Auto-updated provider to skip it on next call — please retry. ` +
+        `Raw: ${txt.slice(0,160)}`
+      );
+    }
+    if (resp.status === 400 && /(top_p|top_k).*deprecated/i.test(txt)) {
+      p.supportsTemperature = false;
+      try { save(); } catch (e) {}
+      throw new Error(`Anthropic 400: sampling parameter rejected. Auto-updated provider — retry. Raw: ${txt.slice(0,160)}`);
+    }
+    if (resp.status === 401) {
+      throw new Error(`Anthropic 401: API key rejected. Verify the key in the inspector.`);
+    }
+    if (resp.status === 404) {
+      throw new Error(
+        `Anthropic 404: model "${p.model}" not found. ` +
+        `Use "claude-opus-4-7", "claude-sonnet-4-6", or an alias from https://docs.anthropic.com/en/docs/about-claude/models. ` +
+        `Raw: ${txt.slice(0,160)}`
+      );
+    }
     throw new Error(`Anthropic ${resp.status}: ${txt.slice(0,200)}`);
   }
   const data = await resp.json();
@@ -3145,6 +3267,20 @@ async function callGemini(p, key, user) {
   });
   if (!resp.ok) {
     const txt = await resp.text();
+    // A 404 almost always means the model ID was deprecated. Google retires
+    // Gemini model IDs frequently and emits a 404 with a ListModels hint.
+    // Surface a clearer message so the fix is obvious.
+    if (resp.status === 404) {
+      throw new Error(
+        `Gemini 404: model "${p.model}" not found or no longer supported. ` +
+        `Google frequently deprecates model IDs. Try "gemini-2.5-pro", ` +
+        `"gemini-2.5-flash", or "gemini-flash-latest" via the + Add Custom / Local Model button. ` +
+        `Raw: ${txt.slice(0,160)}`
+      );
+    }
+    if (resp.status === 400 && /API key not valid/i.test(txt)) {
+      throw new Error(`Gemini 400: API key rejected. Verify the key in the inspector.`);
+    }
     throw new Error(`Gemini ${resp.status}: ${txt.slice(0,200)}`);
   }
   const data = await resp.json();
@@ -4176,17 +4312,22 @@ function wire() {
     const endpoint = document.getElementById('llm-endpoint-input').value.trim();
     const model = document.getElementById('llm-model-input').value.trim();
     const key = document.getElementById('llm-key-input').value;
+    const noTemp = document.getElementById('llm-no-temperature-input').checked;
     if (!name || !endpoint || !model) { alert('Name, endpoint, and model are required.'); return; }
     const id = 'custom_' + Date.now().toString(36);
     state.llm.providers.push({
       id, name, provider: type, endpoint, model,
       needsKey: type !== 'openai-compatible' || !!key,
+      supportsTemperature: !noTemp,
+      // Enable the effort-based fallback for Anthropic models when no temp.
+      supportsEffort: noTemp && type === 'anthropic',
     });
     if (key) state.llm.keys[id] = key;
     state.llm.selected = id;
     renderLlmList(); renderKeyFields(); renderCompareTargets(); save();
     closeModal('modal-llm');
     ['llm-name-input','llm-endpoint-input','llm-model-input','llm-key-input'].forEach(x => document.getElementById(x).value = '');
+    document.getElementById('llm-no-temperature-input').checked = false;
   });
 
   // Clock
